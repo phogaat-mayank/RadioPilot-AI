@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.next/
+node_modules/
+backend/media/
+backend/radiopilot.db
+backend/schema-generation.db
+backend/migration-verify.db

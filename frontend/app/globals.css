@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 10% 0%, #1d1740 0%, transparent 30%), radial-gradient(circle at 90% 10%, #0d3140 0%, transparent 28%), #080b12; color: #e6eaf2; font-family: Arial, Helvetica, sans-serif; }
+button { cursor: pointer; transition: transform .18s ease, filter .18s ease, background-color .18s ease; }
+button:hover { filter: brightness(1.12); transform: translateY(-1px); }
+button:active { transform: translateY(0) scale(.98); }
+.panel { border: 1px solid #20283a; background: linear-gradient(135deg, rgba(17, 23, 36, .94) 0%, rgba(13, 18, 29, .94) 100%); border-radius: 16px; box-shadow: 0 16px 38px rgba(0, 0, 0, .18); animation: panel-in .45s ease both; }
+.muted { color: #8d99ae; }
+.pill { border-radius: 9999px; padding: .35rem .7rem; font-size: .75rem; font-weight: 700; }
+@keyframes panel-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes live-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .3); } 50% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); } }
+.pulse-live { animation: live-pulse 1.8s infinite; }
+.login-card { animation: panel-in .55s ease both; }

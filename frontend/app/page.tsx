@@ -1,0 +1,71 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ListMusic, LogOut, Pause, Play, Radio, SkipForward, Volume2, WandSparkles } from "lucide-react";
+import AIConsole from "../components/AIConsole";
+import OperationsWorkspace from "../components/OperationsWorkspace";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+type Song = { id: number; title: string; artist: string; duration_seconds: number; file_path: string };
+type Station = { status: string; mode: "MANUAL" | "AUTOPILOT"; volume: number; current_song: Song | null; current_position_seconds: number; playback_revision: number; queue: Song[] };
+
+async function request(path: string, token: string, init: RequestInit = {}) {
+  const response = await fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers } });
+  if (!response.ok) {
+    const error = new Error((await response.json().catch(() => ({ detail: response.statusText }))).detail) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+export default function Home() {
+  const [token, setToken] = useState<string | null>(null);
+  const [email, setEmail] = useState("admin@radiopilot.local");
+  const [password, setPassword] = useState("");
+  const [station, setStation] = useState<Station | null>(null);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const refresh = async (activeToken = token) => {
+    if (!activeToken) return;
+    const [current, library] = await Promise.all([request("/station/status", activeToken), request("/library/songs", activeToken)]);
+    setStation(current);
+    setSongs(library);
+  };
+
+  useEffect(() => { const stored = localStorage.getItem("radiopilot_token"); if (stored) setToken(stored); }, []);
+  useEffect(() => { void refresh().catch((e: Error & { status?: number }) => { if (e.status === 401) { localStorage.removeItem("radiopilot_token"); setToken(null); setError("Your session expired. Please sign in again."); } else setError(e.message); }); }, [token]);
+  useEffect(() => { if (!token) return; const timer = window.setInterval(() => void refresh().catch(() => undefined), 2500); return () => window.clearInterval(timer); }, [token]);
+
+  useEffect(() => {
+    if (!token || !station?.current_song) { setAudioUrl(null); return; }
+    const controller = new AbortController();
+    let objectUrl = "";
+    void fetch(`${API}/library/songs/${station.current_song.id}/stream`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+      .then(response => { if (!response.ok) throw new Error("Could not load audio for browser playback"); return response.blob(); })
+      .then(blob => { objectUrl = URL.createObjectURL(blob); setAudioUrl(objectUrl); })
+      .catch(fetchError => { if (fetchError.name !== "AbortError") setError(fetchError.message); });
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [token, station?.current_song?.id, station?.playback_revision]);
+
+  useEffect(() => {
+    const player = audioRef.current;
+    if (!player || !audioUrl) return;
+    player.volume = Math.max(0, Math.min(1, (station?.volume ?? 75) / 100));
+    if (station?.status === "playing") void player.play().catch(() => setError("Click the audio player once to allow sound in this browser."));
+    if (station?.status === "paused" || station?.status === "stopped") player.pause();
+  }, [audioUrl, station?.status, station?.volume]);
+
+  const title = useMemo(() => station?.current_song ? `${station.current_song.title} — ${station.current_song.artist}` : "No track on air", [station]);
+  const invoke = async (path: string, init?: RequestInit) => { try { setError(""); await request(path, token!, init); await refresh(); } catch (invokeError) { setError(invokeError instanceof Error ? invokeError.message : "Request failed"); } };
+  const login = async (event: FormEvent) => { event.preventDefault(); setLoading(true); try { const result = await request("/auth/login", "", { method: "POST", body: JSON.stringify({ email, password }) }); localStorage.setItem("radiopilot_token", result.access_token); setToken(result.access_token); } catch (loginError) { setError(loginError instanceof Error ? loginError.message : "Login failed"); } finally { setLoading(false); } };
+  const setVolume = (value: number) => { if (audioRef.current) audioRef.current.volume = value / 100; void invoke("/station/volume", { method: "PUT", body: JSON.stringify({ volume: value }) }); };
+
+  if (!token) return <main className="grid min-h-screen place-items-center p-6"><form onSubmit={login} className="panel login-card w-full max-w-md space-y-5 p-8"><div className="flex items-center gap-3"><div className="rounded-xl bg-violet-500 p-3"><Radio /></div><div><h1 className="text-2xl font-bold">RadioPilot AI</h1><p className="muted text-sm">Hybrid FM automation control</p></div></div><label className="block text-sm">Email<input value={email} onChange={e => setEmail(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 p-3" type="email" /></label><label className="block text-sm">Password<input value={password} onChange={e => setPassword(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 p-3" type="password" /></label>{error && <p className="text-sm text-rose-400">{error}</p>}<button disabled={loading} className="w-full rounded-lg bg-violet-500 py-3 font-semibold">{loading ? "Signing in..." : "Sign in"}</button></form></main>;
+
+  return <main className="min-h-screen p-4 md:p-8"><header className="mx-auto mb-7 flex max-w-7xl items-center justify-between"><div className="flex items-center gap-3"><div className="rounded-xl bg-violet-500 p-3"><Radio /></div><div><h1 className="text-xl font-bold">RadioPilot AI</h1><p className="muted text-sm">Broadcast operations center</p></div></div><button onClick={() => { localStorage.removeItem("radiopilot_token"); setToken(null); }} className="muted flex items-center gap-2 text-sm"><LogOut size={16}/> Sign out</button></header><section className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[1.6fr_1fr]"><div className="space-y-5"><section className="panel p-6"><div className="flex items-center justify-between"><span className={`pill ${station?.status === "playing" ? "bg-emerald-500/20 text-emerald-300 pulse-live" : "bg-slate-700 text-slate-300"}`}>● {station?.status?.toUpperCase() ?? "CONNECTING"}</span><button aria-label="Toggle autopilot" onClick={() => void invoke(station?.mode === "AUTOPILOT" ? "/ai/autopilot/stop" : "/ai/autopilot/start", { method: "POST" })} className={`pill flex items-center gap-2 ${station?.mode === "AUTOPILOT" ? "bg-violet-500 text-white" : "bg-amber-400/15 text-amber-300"}`}><WandSparkles size={14}/>{station?.mode === "AUTOPILOT" ? "AUTOPILOT ON" : "AUTOPILOT OFF"}</button></div><p className="muted mt-12 text-sm">NOW PLAYING</p><h2 className="mt-2 text-3xl font-bold">{title}</h2><p className="muted mt-2">{Math.floor(station?.current_position_seconds ?? 0)} seconds elapsed</p>{audioUrl && <audio ref={audioRef} src={audioUrl} controls className="mt-5 w-full" onEnded={() => void invoke("/station/track-ended", { method: "POST", body: JSON.stringify({ playback_revision: station?.playback_revision }) })}/>}<div className="mt-7 flex items-center gap-4"><button onClick={() => void invoke(station?.status === "playing" ? "/station/pause" : station?.status === "paused" ? "/station/resume" : "/station/play", { method: "POST" })} className="grid h-14 w-14 place-items-center rounded-full bg-violet-500">{station?.status === "playing" ? <Pause/> : <Play/>}</button><button onClick={() => void invoke("/station/skip", { method: "POST" })} className="rounded-lg bg-slate-800 p-4"><SkipForward/></button><div className="ml-2 flex flex-1 items-center gap-3"><Volume2 size={19}/><input aria-label="Volume" value={station?.volume ?? 75} type="range" min="0" max="100" className="w-full accent-violet-500" onChange={e => setVolume(Number(e.target.value))}/><span>{station?.volume ?? 75}</span></div></div></section><section className="panel p-6"><div className="mb-4 flex items-center gap-2"><ListMusic size={19}/><h2 className="font-bold">Live queue</h2></div>{station?.queue.length ? station.queue.map((song, i) => <div key={`${song.id}-${i}`} className="mb-2 flex gap-3 rounded-lg bg-slate-950/60 p-3"><span className="muted">{i + 1}</span><span>{song.title} <small className="muted">{song.artist}</small></span></div>) : <p className="muted text-sm">Add a song from the library to begin.</p>}</section><AIConsole token={token}/></div><aside className="space-y-5"><OperationsWorkspace token={token} songs={songs} refresh={async () => refresh()}/><section className="panel p-6"><h2 className="font-bold">Quick queue</h2><div className="mt-4 space-y-2">{songs.map(song => <button onClick={() => void invoke("/station/queue", { method: "POST", body: JSON.stringify({ song_id: song.id })})} className="w-full rounded-lg bg-slate-950/70 p-3 text-left hover:bg-slate-800" key={song.id}><p>{song.title}</p><p className="muted text-xs">{song.artist}</p></button>)}{!songs.length && <p className="muted text-sm">Upload a song in the Library tab first.</p>}</div>{error && <p className="mt-4 text-sm text-rose-400">{error}</p>}</section></aside></section></main>;
+}

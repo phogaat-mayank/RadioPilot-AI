@@ -1,0 +1,22 @@
+# RadioPilot execution plane: only the private Docker network may reach port 1234.
+settings.server.telnet := true
+settings.server.telnet.bind_addr := "0.0.0.0"
+settings.server.telnet.port := 1234
+settings.server.telnet.revdns := false
+
+# The queue is controlled exclusively by RadioPilot's PlaybackController.
+queue = request.queue(id="queue")
+radio = mksafe(queue)
+
+output.icecast(
+  %mp3(bitrate=128, stereo=true),
+  host="${ICECAST_HOST}",
+  port=${ICECAST_PORT},
+  user="${ICECAST_SOURCE_USER}",
+  password="${ICECAST_SOURCE_PASSWORD}",
+  mount="${ICECAST_MOUNT}",
+  name="${STATION_NAME}",
+  description="RadioPilot AI automated radio output",
+  restart=true,
+  radio
+)
