@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from api.deps import SessionDep, UserDep
 from models.entities import Playlist
 from repositories.radio import RadioRepository
-from schemas.radio import PlaylistCreate, PlaylistOut, ReorderPlaylist
+from schemas.radio import PlaylistCreate, PlaylistDetail, PlaylistOut, ReorderPlaylist, SongOut
 from services.radio import RadioService
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
@@ -22,6 +22,15 @@ async def create_playlist(payload: PlaylistCreate, session: SessionDep, user: Us
     playlist = await RadioService(session).create_playlist(payload)
     await RadioService(session).log("playlist", f"Created {playlist.name}", user.email)
     return playlist
+
+
+@router.get("/{playlist_id}", response_model=PlaylistDetail)
+async def get_playlist(playlist_id: int, session: SessionDep, _: UserDep) -> PlaylistDetail:
+    """Return a playlist and its current ordered songs for dashboard management."""
+    playlist = await RadioRepository(session).get_playlist(playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    return PlaylistDetail.model_validate(playlist, from_attributes=True).model_copy(update={"songs": [SongOut.model_validate(item.song, from_attributes=True) for item in playlist.items]})
 
 
 @router.post("/{playlist_id}/songs/{song_id}", status_code=204)

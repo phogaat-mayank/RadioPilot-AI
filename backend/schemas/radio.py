@@ -48,6 +48,12 @@ class PlaylistOut(PlaylistCreate):
     id: int
 
 
+class PlaylistDetail(PlaylistOut):
+    """A playlist with its ordered, currently available library songs."""
+
+    songs: list[SongOut] = []
+
+
 class ReorderPlaylist(BaseModel):
     """Drag-and-drop ordering payload."""
     song_ids: list[int] = Field(min_length=1)

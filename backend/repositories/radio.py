@@ -1,11 +1,11 @@
 """Repository layer for station resources."""
 
 from collections.abc import Sequence
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from models.entities import Playlist, PlaylistSong, Schedule, Song, SystemState, User
+from models.entities import PlaybackHistory, Playlist, PlaylistSong, Schedule, Song, SystemState, User
 
 
 class RadioRepository:
@@ -46,7 +46,9 @@ class RadioRepository:
         return song
 
     async def delete_song(self, song: Song) -> None:
-        """Delete a song and its association records."""
+        """Delete a song while retaining historical playback audit records."""
+        await self.session.execute(update(PlaybackHistory).where(PlaybackHistory.song_id == song.id).values(song_id=None))
+        await self.session.execute(delete(PlaylistSong).where(PlaylistSong.song_id == song.id))
         await self.session.delete(song)
         await self.session.commit()
 
