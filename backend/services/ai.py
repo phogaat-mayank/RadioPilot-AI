@@ -12,6 +12,7 @@ from models.entities import AIConversation, AIDecision, AILog, AITask, StationMo
 from repositories.ai import AIRepository
 from repositories.radio import RadioRepository
 from schemas.ai import AIRequest, AIResponse, AIStatus
+from schemas.radio import PlaylistCreate
 from services.radio import RadioService
 from tools.memory_tool import MemoryTool
 from tools.music_library_tool import MusicLibraryTool
@@ -39,21 +40,46 @@ class AIService:
             response, data = graph_state["response"], graph_state.get("data", {})
             model = "deterministic"
             if request_type == "chat":
-                history = await self.repository.recent_messages(payload.session_id, limit=10)
-                conversation = "\n".join(f"{message.role.title()}: {message.content}" for message in history)
-                system_prompt = """You are RJ AI, an intelligent, friendly assistant for a radio station operator.
-You can help with ordinary conversation, music discovery, show ideas, artist facts, presenter links,
-audience engagement, programming, scheduling ideas, marketing copy, technical troubleshooting, and
-the station dashboard. Correct obvious spelling or speech-to-text mistakes silently before answering.
-Do not pretend that you have performed an external action unless the dashboard confirms it. For a
-song request, remind the operator to use the Play command when appropriate. Give practical, specific
-answers instead of canned menu responses. Keep the answer concise unless the operator asks for detail."""
-                response, model = await LLMGateway().complete(system_prompt, f"Recent conversation:\n{conversation}\n\nRespond to the latest operator request: {payload.prompt}")
+                history = await self.repository.recent_messages(payload.session_id, limit=16)
+                messages_payload = [{"role": msg.role, "content": msg.content} for msg in history]
+                if not any(m["role"] == "user" and m["content"] == payload.prompt for m in messages_payload):
+                    messages_payload.append({"role": "user", "content": payload.prompt})
+
+                system_prompt = """You are NOVA, a charismatic, friendly, and deeply knowledgeable female Radio Jockey (RJ) co-host and universal AI assistant on RadioPilot AI.
+
+Your Voice & Persona:
+- Warm, expressive, lively, and completely human—full of energy, charm, and friendly radio vibes.
+- Language Policy: You communicate strictly in **English** or **Hindi (हिंदी)** (Do NOT use mixed Romanized Hinglish).
+- **When replying in Hindi (हिंदी)**: Use simple, sweet, and everyday conversational Hindi (सरल, सहज और आम बोलचाल की आसान हिंदी).
+  - CRITICAL RULE: NEVER use difficult, heavy, high-level, archaic, or complex Sanskritized words (कठिन या क्लिष्ट शब्द बिल्कुल इस्तेमाल न करें). Keep vocabulary easy to understand for every common listener (जैसे 'समय', 'दोस्त', 'गाना', 'खुशी', 'बातें', 'शुरुआत', 'स्वागत').
+  - Write Hindi strictly in clean Devanagari script.
+- **When replying in English**: Use clear, engaging, articulate, and upbeat conversational English.
+- Always match the user's language: If the user asks in Hindi, reply in simple Hindi. If the user asks in English, reply in English.
+
+Your Knowledge & Scope:
+1. Universal Mastermind: Answer ANY question across science, mathematics, coding/technology, history, philosophy, trivia, geography, storytelling, logic, life advice, and pop culture with clarity and intellect.
+2. FM Radio & Script Star: Compose unforgettable radio show intros, outros, banter, links, listener hooks, interview questions, and station copy.
+3. Music & Audio Genius: Provide rich music facts, track backstories, BPM matching, genre dynamics, and curation philosophy.
+4. Station Operations: Guide the team on automation, scheduling, playlists, and audio chain engineering.
+
+Formatting & Delivery:
+- Use clean, structured Markdown (bold headers, bullet points, code blocks where appropriate).
+- Write in a smooth spoken flow so that when read out loud by voice synthesis, every word sounds crystal clear, natural, and easy to understand."""
+
+                response, model = await LLMGateway().complete_chat(system_prompt, messages_payload)
             if request_type == "playlist":
                 candidates = await MusicLibraryTool(self.session).candidates(payload.mood)
                 songs = PlaylistTool.curate(candidates, payload.duration_minutes or 60)
-                data = {**data, "songs": [{"id": song.id, "title": song.title, "artist": song.artist} for song in songs], "duration_seconds": sum(song.duration_seconds for song in songs)}
-                response = f"Prepared {len(songs)} artist-separated tracks for a {payload.duration_minutes or 60}-minute rotation."
+                if not songs:
+                    response = "I could not build a playlist because your music library is empty. Upload songs first, then try again."
+                    data = {**data, "songs": [], "duration_seconds": 0}
+                else:
+                    label = (payload.prompt.strip() or payload.mood or "Station Rotation")[:80]
+                    playlist = await RadioService(self.session).create_playlist(PlaylistCreate(name=f"RJ AI — {label} — {datetime.now().strftime('%H%M%S')}", description=f"Generated {payload.duration_minutes or 60}-minute {payload.mood or 'balanced'} rotation"))
+                    for song in songs:
+                        await RadioRepository(self.session).add_to_playlist(playlist, song)
+                    data = {**data, "playlist_id": playlist.id, "playlist_name": playlist.name, "songs": [{"id": song.id, "title": song.title, "artist": song.artist} for song in songs], "duration_seconds": sum(song.duration_seconds for song in songs)}
+                    response = f"Created playlist ‘{playlist.name}’ with {len(songs)} artist-separated tracks for about {payload.duration_minutes or 60} minutes. It is ready in the Playlists tab."
             elapsed = int((perf_counter() - started) * 1000)
             task.status, task.agent_name, task.output_json, task.model, task.execution_ms, task.completed_at = "completed", graph_state["selected_agent"], {"response": response, "data": data}, model, elapsed, datetime.now(timezone.utc)
             await self.session.commit()
@@ -96,3 +122,12 @@ answers instead of canned menu responses. Keep the answer concise unless the ope
     async def history(self) -> list[dict]:
         """Serialize bounded AI task history for the dashboard."""
         return [{"id": task.id, "task_type": task.task_type, "status": task.status, "agent": task.agent_name, "model": task.model, "execution_ms": task.execution_ms, "created_at": task.created_at, "output": task.output_json} for task in await self.repository.history()]
+
+    async def chat_history(self, session_id: str, limit: int = 40) -> list[dict]:
+        """Return serialized chat messages for a given session."""
+        messages = await self.repository.recent_messages(session_id, limit=limit)
+        return [{"id": msg.id, "role": msg.role, "content": msg.content, "created_at": msg.created_at.isoformat()} for msg in messages]
+
+    async def clear_chat(self, session_id: str) -> int:
+        """Clear conversation history for a given session."""
+        return await self.repository.clear_messages(session_id)

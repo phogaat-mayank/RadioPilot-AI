@@ -10,11 +10,31 @@ from fastapi.responses import FileResponse
 from api.deps import SessionDep, UserDep
 from core.config import settings
 from repositories.radio import RadioRepository
-from schemas.radio import SongCreate, SongOut
+from schemas.radio import BatchUploadOut, SongCreate, SongOut
 from services.radio import RadioService
 
 router = APIRouter(prefix="/library", tags=["library"])
-_allowed_content_types = {"audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "audio/x-wav"}
+_allowed_content_types = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/ogg",
+    "audio/mp4",
+    "audio/x-wav",
+    "audio/x-m4a",
+    "audio/aac",
+    "audio/x-aac",
+    "audio/flac",
+    "audio/x-flac",
+}
+_allowed_audio_extensions = {".mp3", ".wav", ".ogg", ".mp4", ".m4a", ".aac", ".flac"}
+
+
+def _is_audio_file(file: UploadFile) -> bool:
+    """Return whether the file is a recognized audio format by extension or MIME type."""
+    extension = Path(file.filename or "").suffix.lower()
+    content_type = (file.content_type or "").lower().strip()
+    return extension in _allowed_audio_extensions or content_type in _allowed_content_types
 
 
 def _first_tag(metadata: object, name: str) -> str | None:
@@ -112,8 +132,8 @@ async def list_songs(session: SessionDep, _: UserDep, q: str | None = Query(defa
 @router.post("/songs", response_model=SongOut, status_code=201)
 async def upload_song(session: SessionDep, user: UserDep, file: UploadFile = File(...), title: str | None = Form(None), artist: str | None = Form(None), genre: str | None = Form(None), duration_seconds: float | None = Form(None)) -> SongOut:
     """Store an audio upload and automatically derive its metadata when omitted."""
-    if file.content_type not in _allowed_content_types:
-        raise HTTPException(status_code=415, detail="Only common audio formats are accepted")
+    if not _is_audio_file(file):
+        raise HTTPException(status_code=415, detail=f"Unsupported audio file: {file.filename or 'file'}. Accepted formats: MP3, WAV, OGG, M4A, FLAC, AAC.")
     extension = Path(file.filename or "audio.bin").suffix.lower()
     destination_dir = settings.media_path
     destination_dir.mkdir(parents=True, exist_ok=True)
@@ -125,9 +145,21 @@ async def upload_song(session: SessionDep, user: UserDep, file: UploadFile = Fil
         raise HTTPException(status_code=413, detail="Audio uploads are limited to 250 MB")
     destination.write_bytes(contents)
     detected_title, detected_artist, detected_duration = _detect_metadata(destination, file.filename or destination.name)
+    resolved_title = title.strip() if title and title.strip() else detected_title
+    resolved_artist = artist.strip() if artist and artist.strip() else detected_artist
+
+    # Check for duplicate song in library
+    existing = await RadioRepository(session).find_duplicate_song(resolved_title, resolved_artist)
+    if existing:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{resolved_title} — {resolved_artist}' is already present in the library",
+        )
+
     try:
         song = await RadioService(session).add_song(
-            payload=SongCreate(title=title.strip() if title and title.strip() else detected_title, artist=artist.strip() if artist and artist.strip() else detected_artist, genre=genre, duration_seconds=duration_seconds if duration_seconds is not None and duration_seconds > 0 else detected_duration),
+            payload=SongCreate(title=resolved_title, artist=resolved_artist, genre=genre, duration_seconds=duration_seconds if duration_seconds is not None and duration_seconds > 0 else detected_duration),
             file_path=str(destination),
         )
     except Exception:
@@ -137,17 +169,46 @@ async def upload_song(session: SessionDep, user: UserDep, file: UploadFile = Fil
     return song
 
 
-@router.post("/songs/batch", response_model=list[SongOut], status_code=201)
-async def upload_songs(session: SessionDep, user: UserDep, files: list[UploadFile] = File(...)) -> list[SongOut]:
-    """Upload multiple audio files and detect each file's metadata independently."""
+@router.post("/songs/batch", response_model=BatchUploadOut, status_code=201)
+async def upload_songs(session: SessionDep, user: UserDep, files: list[UploadFile] = File(...)) -> BatchUploadOut:
+    """Upload multiple audio files, filtering out non-audio files and skipping songs already present in library."""
     if not files:
         raise HTTPException(status_code=422, detail="Choose at least one audio file")
-    if len(files) > 50:
+    valid_files = [file for file in files if _is_audio_file(file)]
+    if not valid_files:
+        invalid_names = [file.filename or "unnamed file" for file in files]
+        raise HTTPException(
+            status_code=415,
+            detail=f"No valid audio files found. Skipped non-audio/shortcut file(s): {', '.join(invalid_names[:5])}. Please select MP3, WAV, OGG, M4A, FLAC, or AAC files.",
+        )
+    if len(valid_files) > 50:
         raise HTTPException(status_code=422, detail="Upload up to 50 audio files at a time")
-    invalid = [file.filename or "unnamed file" for file in files if file.content_type not in _allowed_content_types]
-    if invalid:
-        raise HTTPException(status_code=415, detail=f"Unsupported audio file(s): {', '.join(invalid)}")
-    return [await upload_song(session, user, file, None, None, None, None) for file in files]
+
+    uploaded_songs: list[SongOut] = []
+    duplicate_names: list[str] = []
+
+    for file in valid_files:
+        try:
+            song = await upload_song(session, user, file, None, None, None, None)
+            uploaded_songs.append(song)
+        except HTTPException as exc:
+            if exc.status_code == 409:
+                # Extract clean song identifier from error detail or filename
+                duplicate_names.append(file.filename or "Track")
+            else:
+                raise
+
+    if not uploaded_songs and duplicate_names:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Already present in library: {', '.join(duplicate_names)}",
+        )
+
+    return BatchUploadOut(
+        uploaded=uploaded_songs,
+        duplicates=duplicate_names,
+        count=len(uploaded_songs),
+    )
 
 
 @router.get("/songs/{song_id}/stream")
@@ -160,6 +221,21 @@ async def stream_song(song_id: int, session: SessionDep, _: UserDep) -> FileResp
     if not path.is_file() or settings.media_path not in path.parents:
         raise HTTPException(status_code=404, detail="Audio file is unavailable")
     return FileResponse(path, media_type=None, filename=path.name)
+
+
+@router.delete("/songs", status_code=200)
+async def delete_all_songs(session: SessionDep, user: UserDep) -> dict[str, int]:
+    """Delete all library songs, clean up local files, and clear the live queue."""
+    repository = RadioRepository(session)
+    songs = await repository.list_songs()
+    for song in songs:
+        path = Path(song.file_path)
+        if path.is_file() and settings.media_path in path.resolve().parents:
+            path.unlink(missing_ok=True)
+    count = await repository.delete_all_songs()
+    await RadioService(session).clear_queue(actor=user.email)
+    await RadioService(session).log("library", f"Deleted all {count} songs", user.email, {"count": count})
+    return {"deleted": count}
 
 
 @router.delete("/songs/{song_id}", status_code=204)

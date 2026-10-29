@@ -1,6 +1,7 @@
 """Playlist CRUD and ordering endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from api.deps import SessionDep, UserDep
 from models.entities import Playlist
 from repositories.radio import RadioRepository
@@ -16,12 +17,27 @@ async def list_playlists(session: SessionDep, _: UserDep) -> list[Playlist]:
     return list(await RadioRepository(session).list_playlists())
 
 
-@router.post("", response_model=PlaylistOut, status_code=201)
+@router.post("", response_model=PlaylistOut, status_code=status.HTTP_201_CREATED)
 async def create_playlist(payload: PlaylistCreate, session: SessionDep, user: UserDep) -> Playlist:
     """Create a playlist."""
-    playlist = await RadioService(session).create_playlist(payload)
-    await RadioService(session).log("playlist", f"Created {playlist.name}", user.email)
-    return playlist
+    try:
+        playlist = await RadioService(session).create_playlist(payload)
+        await RadioService(session).log("playlist", f"Created {playlist.name}", user.email)
+        return playlist
+    except IntegrityError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Playlist '{payload.name}' already exists") from err
+
+
+@router.delete("/{playlist_id}", status_code=204)
+async def delete_playlist(playlist_id: int, session: SessionDep, user: UserDep) -> None:
+    """Delete a playlist and disable schedules that depended on it."""
+    repository = RadioRepository(session)
+    playlist = await repository.get_playlist(playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    name = playlist.name
+    await repository.delete_playlist(playlist)
+    await RadioService(session).log("playlist", f"Deleted {name}", user.email, {"playlist_id": playlist_id})
 
 
 @router.get("/{playlist_id}", response_model=PlaylistDetail)

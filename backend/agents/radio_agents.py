@@ -48,7 +48,7 @@ def rj_script_agent(state: AgentState) -> dict:
 def news_agent(state: AgentState) -> dict:
     """Generate a radio-friendly bulletin from supplied verified headlines."""
     headlines = state.get("metadata", {}).get("headlines", [])
-    return {"response": NewsTool.bulletin(headlines), "data": {"intent": "news"}, "requires_approval": True}
+    return {"response": NewsTool.bulletin(headlines, state.get("prompt", "")), "data": {"intent": "news", "headline_count": len(NewsTool.extract_headlines(state.get("prompt", ""), headlines))}, "requires_approval": False}
 
 
 def advertisement_agent(state: AgentState) -> dict:

@@ -144,7 +144,8 @@ class AutopilotManager:
         schedule_id = event.payload.get("schedule_id")
         await self._state_manager.update(lambda current: current.evolve(last_event=f"SCHEDULE_TRIGGERED:{schedule_id}"))
         event_type = str(event.payload.get("event_type", "playlist")).lower()
-        mapping = {"playlist": ActionType.PLAY_PLAYLIST, "advertisement": ActionType.PLAY_ADS, "jingle": ActionType.PLAY_JINGLE, "announcement": ActionType.PLAY_JINGLE, "news": ActionType.LOAD_QUEUE}
+        phase = str(event.payload.get("phase", "broadcast"))
+        mapping = {"playlist": ActionType.PLAY_PLAYLIST, "advertisement": ActionType.PLAY_ADS, "jingle": ActionType.PLAY_JINGLE, "announcement": ActionType.PLAY_JINGLE, "news": ActionType.PREPARE_NEWS if phase == "prepare" else ActionType.PLAY_NEWS}
         action = AutopilotAction(mapping.get(event_type, ActionType.LOAD_QUEUE), f"Execute due {event_type} schedule", dict(event.payload), priority=10, correlation_id=event.correlation_id)
         await self._dispatch(action)
 

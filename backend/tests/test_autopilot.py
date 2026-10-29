@@ -76,6 +76,36 @@ async def test_event_bus_and_schedule_executor_publish_once() -> None:
 
 
 @pytest.mark.asyncio
+async def test_news_schedule_prepares_before_then_broadcasts_once() -> None:
+    """A news bulletin is prepared in advance and is broadcast only at airtime."""
+    bus = EventBus()
+    received: list[AutopilotEvent] = []
+
+    async def record(event: AutopilotEvent) -> None:
+        received.append(event)
+
+    await bus.subscribe(AutopilotEventType.SCHEDULE_TRIGGERED, record)
+    run_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    news = ScheduleRef(
+        id=8,
+        event_type="news",
+        run_at=run_at,
+        payload={"preparation_minutes": 10, "duration_seconds": 60},
+    )
+
+    async def provider() -> tuple[ScheduleRef, ...]:
+        return (news,)
+
+    executor = ScheduleExecutor(provider, bus)
+    assert await executor.poll(run_at - timedelta(minutes=10)) == ()
+    assert [event.payload["phase"] for event in received] == ["prepare"]
+    assert await executor.poll(run_at - timedelta(minutes=5)) == ()
+    assert len(received) == 1
+    assert await executor.poll(run_at) == (news,)
+    assert [event.payload["phase"] for event in received] == ["prepare", "broadcast"]
+
+
+@pytest.mark.asyncio
 async def test_state_manager_restores_persisted_snapshot(tmp_path) -> None:
     """State snapshots survive a restart when persistence is configured."""
     path = tmp_path / "autopilot-state.json"

@@ -28,3 +28,16 @@ async def create_schedule(payload: ScheduleCreate, session: SessionDep, user: Us
         station_scheduler.register_playlist(schedule.id, payload.playlist_id, payload.run_at)
     await RadioService(session).log("scheduler", f"Scheduled {schedule.name}", user.email, {"schedule_id": schedule.id})
     return schedule
+
+
+@router.delete("/{schedule_id}", status_code=204)
+async def delete_schedule(schedule_id: int, session: SessionDep, user: UserDep) -> None:
+    """Delete a scheduled event."""
+    repository = RadioRepository(session)
+    schedule = await repository.get_schedule(schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule event not found")
+    name = schedule.name
+    await repository.delete_schedule(schedule)
+    await RadioService(session).log("scheduler", f"Deleted schedule {name}", user.email, {"schedule_id": schedule_id})
+

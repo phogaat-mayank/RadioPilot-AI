@@ -1,15 +1,229 @@
 @import "tailwindcss";
 
-:root { color-scheme: dark; }
-* { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 10% 0%, #1d1740 0%, transparent 30%), radial-gradient(circle at 90% 10%, #0d3140 0%, transparent 28%), #080b12; color: #e6eaf2; font-family: Arial, Helvetica, sans-serif; }
-button { cursor: pointer; transition: transform .18s ease, filter .18s ease, background-color .18s ease; }
-button:hover { filter: brightness(1.12); transform: translateY(-1px); }
-button:active { transform: translateY(0) scale(.98); }
-.panel { border: 1px solid #20283a; background: linear-gradient(135deg, rgba(17, 23, 36, .94) 0%, rgba(13, 18, 29, .94) 100%); border-radius: 16px; box-shadow: 0 16px 38px rgba(0, 0, 0, .18); animation: panel-in .45s ease both; }
-.muted { color: #8d99ae; }
-.pill { border-radius: 9999px; padding: .35rem .7rem; font-size: .75rem; font-weight: 700; }
-@keyframes panel-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes live-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .3); } 50% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); } }
-.pulse-live { animation: live-pulse 1.8s infinite; }
-.login-card { animation: panel-in .55s ease both; }
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* Deep obsidian canvas with exact ambient light orbs from reference image:
+     - Top-left/center: luminous lime/chartreuse glow (#bbf246)
+     - Bottom-right: warm amber/coral glow (#f59e0b / #fb923c)
+     - Center-left: soft aqua-cyan glow (#22d3ee)
+  */
+  background-color: #08090c;
+  background-image:
+    radial-gradient(circle at 18% 6%, rgba(187, 242, 70, 0.22) 0%, transparent 38%),
+    radial-gradient(circle at 35% 25%, rgba(163, 230, 53, 0.12) 0%, transparent 35%),
+    radial-gradient(circle at 88% 75%, rgba(245, 158, 11, 0.20) 0%, transparent 40%),
+    radial-gradient(circle at 95% 90%, rgba(251, 146, 60, 0.14) 0%, transparent 32%),
+    radial-gradient(circle at 45% 60%, rgba(34, 211, 238, 0.08) 0%, transparent 35%),
+    radial-gradient(circle at 50% 40%, rgba(18, 22, 32, 0.6) 0%, transparent 70%);
+  background-attachment: fixed;
+  color: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Master Frosted Glass Panel (Exact match for reference image panels) */
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 20, 26, 0.72);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  border-radius: 24px;
+  box-shadow:
+    0 25px 55px -12px rgba(0, 0, 0, 0.75),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  animation: panel-in .45s ease both;
+}
+
+/* Nested Glass Sub-Card (like "My schedule" items in reference image) */
+.glass-subcard {
+  background: rgba(26, 29, 37, 0.58);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
+    0 8px 24px -4px rgba(0, 0, 0, 0.35);
+  transition: all .2s ease;
+}
+.glass-subcard:hover {
+  background: rgba(32, 36, 46, 0.7);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    0 12px 28px -4px rgba(0, 0, 0, 0.45);
+}
+
+/* Floating Capsule Bar (like top nav in reference image) */
+.glass-capsule-bar {
+  background: rgba(22, 25, 33, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.12),
+    0 16px 36px -8px rgba(0, 0, 0, 0.5);
+}
+
+.glass-capsule-btn {
+  border-radius: 9999px;
+  padding: .4rem 1rem;
+  font-size: .75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  transition: all .18s ease;
+}
+.glass-capsule-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+.glass-capsule-btn-active {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Exact Accent Badges from reference image */
+.badge-lime {
+  background-color: #bbf246;
+  color: #0c1803;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: .25rem .65rem;
+  font-size: .75rem;
+  box-shadow: 0 2px 10px rgba(187, 242, 70, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.badge-cyan {
+  background-color: #22d3ee;
+  color: #031720;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: .25rem .65rem;
+  font-size: .75rem;
+  box-shadow: 0 2px 10px rgba(34, 211, 238, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.badge-amber {
+  background-color: #fbbf24;
+  color: #1e1101;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: .25rem .65rem;
+  font-size: .75rem;
+  box-shadow: 0 2px 10px rgba(251, 191, 36, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.badge-white {
+  background-color: #ffffff;
+  color: #08090c;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: .25rem .65rem;
+  font-size: .75rem;
+  box-shadow: 0 2px 12px rgba(255, 255, 255, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+/* Glass Inputs */
+.glass-input {
+  background: rgba(16, 18, 24, 0.6) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #f8fafc;
+  border-radius: 12px;
+}
+.glass-input:focus {
+  border-color: rgba(187, 242, 70, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(187, 242, 70, 0.15);
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  transition: transform .18s ease, filter .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+button:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+button:active {
+  transform: translateY(0) scale(.98);
+}
+
+.muted {
+  color: #838d9e;
+}
+
+.pill {
+  border-radius: 9999px;
+  padding: .35rem .8rem;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes live-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(187, 242, 70, 0.5), 0 0 16px rgba(187, 242, 70, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(187, 242, 70, 0), 0 0 28px rgba(187, 242, 70, 0.5);
+  }
+}
+
+.pulse-live {
+  animation: live-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.login-card {
+  animation: panel-in .55s ease both;
+}
+
+/* Custom sleek scrollbar matching the dark frosted UI */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(18, 20, 26, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}

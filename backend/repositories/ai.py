@@ -30,10 +30,17 @@ class AIRepository:
         self.session.add(message)
         await self.session.commit()
 
-    async def recent_messages(self, session_id: str, limit: int = 12) -> Sequence[AIConversation]:
+    async def recent_messages(self, session_id: str, limit: int = 20) -> Sequence[AIConversation]:
         """Return recent messages in chronological order."""
-        records = (await self.session.scalars(select(AIConversation).where(AIConversation.session_id == session_id).order_by(AIConversation.created_at.desc()).limit(limit))).all()
+        records = (await self.session.scalars(select(AIConversation).where(AIConversation.session_id == session_id).order_by(AIConversation.created_at.desc(), AIConversation.id.desc()).limit(limit))).all()
         return list(reversed(records))
+
+    async def clear_messages(self, session_id: str) -> int:
+        """Delete all messages for a given chat session."""
+        from sqlalchemy import delete
+        result = await self.session.execute(delete(AIConversation).where(AIConversation.session_id == session_id))
+        await self.session.commit()
+        return result.rowcount or 0
 
     async def upsert_memory(self, namespace: str, key: str, value: dict) -> AIMemory:
         """Write durable AI memory using a namespaced key."""

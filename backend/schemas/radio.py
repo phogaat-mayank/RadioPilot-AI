@@ -12,6 +12,20 @@ class TokenPair(BaseModel):
     token_type: str = "bearer"
 
 
+class RefreshTokenRequest(BaseModel):
+    """Refresh token payload."""
+    refresh_token: str
+
+
+class UserOut(BaseModel):
+    """Serialized user representation."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    email: str
+    role: str
+    is_active: bool
+
+
 class LoginRequest(BaseModel):
     """Credential login payload."""
     email: str
@@ -32,6 +46,13 @@ class SongOut(SongCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
     file_path: str
+
+
+class BatchUploadOut(BaseModel):
+    """Bulk song upload result including skipped duplicates."""
+    uploaded: list[SongOut] = []
+    duplicates: list[str] = []
+    count: int = 0
 
 
 class PlaylistCreate(BaseModel):
@@ -66,6 +87,7 @@ class ScheduleCreate(BaseModel):
     playlist_id: Optional[int] = None
     run_at: datetime
     enabled: bool = True
+    metadata_json: dict = Field(default_factory=dict)
 
 
 class ScheduleOut(ScheduleCreate):

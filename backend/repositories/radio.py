@@ -1,7 +1,7 @@
 """Repository layer for station resources."""
 
 from collections.abc import Sequence
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -38,6 +38,26 @@ class RadioRepository:
         """Fetch one song."""
         return await self.session.get(Song, song_id)
 
+    async def find_duplicate_song(self, title: str, artist: str) -> Song | None:
+        """Find an existing library song matching title and artist."""
+        clean_title = title.strip().lower()
+        clean_artist = artist.strip().lower()
+        statement = select(Song).where(
+            func.lower(func.trim(Song.title)) == clean_title,
+            func.lower(func.trim(Song.artist)) == clean_artist,
+        )
+        existing = await self.session.scalar(statement)
+        if existing:
+            return existing
+        if clean_artist in {"unknown artist", "unknown", ""}:
+            return await self.session.scalar(
+                select(Song).where(
+                    func.lower(func.trim(Song.title)) == clean_title,
+                    func.lower(func.trim(Song.artist)).in_(["unknown artist", "unknown", ""]),
+                )
+            )
+        return None
+
     async def add_song(self, song: Song) -> Song:
         """Persist a song."""
         self.session.add(song)
@@ -51,6 +71,14 @@ class RadioRepository:
         await self.session.execute(delete(PlaylistSong).where(PlaylistSong.song_id == song.id))
         await self.session.delete(song)
         await self.session.commit()
+
+    async def delete_all_songs(self) -> int:
+        """Delete every song from the library while retaining audit history."""
+        await self.session.execute(update(PlaybackHistory).values(song_id=None))
+        await self.session.execute(delete(PlaylistSong))
+        result = await self.session.execute(delete(Song))
+        await self.session.commit()
+        return result.rowcount
 
     async def list_playlists(self) -> Sequence[Playlist]:
         """List playlists."""
@@ -67,6 +95,12 @@ class RadioRepository:
         await self.session.commit()
         await self.session.refresh(playlist)
         return playlist
+
+    async def delete_playlist(self, playlist: Playlist) -> None:
+        """Delete a playlist, its membership rows, and dependent schedule links."""
+        await self.session.execute(update(Schedule).where(Schedule.playlist_id == playlist.id).values(playlist_id=None, enabled=False))
+        await self.session.delete(playlist)
+        await self.session.commit()
 
     async def add_to_playlist(self, playlist: Playlist, song: Song) -> PlaylistSong:
         """Append a song only once to a playlist."""
@@ -113,3 +147,8 @@ class RadioRepository:
     async def get_schedule(self, schedule_id: int) -> Schedule | None:
         """Fetch one schedule event."""
         return await self.session.get(Schedule, schedule_id)
+
+    async def delete_schedule(self, schedule: Schedule) -> None:
+        """Remove a schedule event."""
+        await self.session.delete(schedule)
+        await self.session.commit()

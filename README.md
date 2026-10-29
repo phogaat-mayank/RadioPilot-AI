@@ -26,6 +26,13 @@ After changing `ADMIN_EMAIL` or `ADMIN_PASSWORD` in `.env`, run `docker compose 
 
 `api` owns transport, `services` owns use cases, repositories isolate persistence, and `playback` owns audio execution. WebSockets broadcast state changes. APScheduler persists scheduled work to PostgreSQL. The LangGraph workflow is invoked only by the autopilot coordinator and returns a recommendation for the service layer to validate.
 
-## Multi-agent RJ AI
+## Multi-agent RJ AI & Conversational Studio
 
-The platform now includes a supervisor graph with Scheduler, Playlist, RJ Script, News, Advertisement, Analytics, Music Director, and Memory agents. New authenticated `/api/v1/ai/*` routes provide RJ chat, specialist actions, task history, mode controls, and approval/rejection of proposed decisions. Celery Worker, Beat, and Flower services are included in Docker Compose for the hourly autopilot cycle. See `docs/multi-agent-platform.md` for the topology and model setup.
+The platform includes an advanced multi-turn conversational studio and supervisor graph with Scheduler, Playlist, RJ Script, News, Advertisement, Analytics, Music Director, and Memory agents. The RJ AI Conversational Studio powered by high-capacity reasoning models (`openai/gpt-oss-120b` via Groq) can answer **any question**—from general knowledge, science, mathematics, coding, and history to radio station programming, playlist curation, witty presenter links, listener engagement, and audio engineering.
+
+Key features:
+- **Universal Multi-turn Chat**: Full conversational memory, GitHub-flavored Markdown rendering, code snippet highlighting with one-click copy, and multi-model fallback cascading.
+- **Voice Studio & TTS**: Hands-free voice recognition (Hindi, Hinglish, English) with intelligent intent routing and speech synthesis for RJ responses.
+- **Specialist Quick Actions**: Instant generation for playlists, presenter scripts, and verified hourly news bulletins.
+- **Persistence & Management**: Complete chat history per session with instant clearing and auto-scroll streams.
+- **Autopilot & Approval Gates**: Seamless manual/autopilot toggles and operator approval workflows. See `docs/multi-agent-platform.md` for full topology details.

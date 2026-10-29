@@ -27,6 +27,12 @@ async def queue(payload: QueueSong, session: SessionDep, user: UserDep) -> Playb
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@router.delete("/queue", response_model=PlaybackState)
+async def clear_queue(session: SessionDep, user: UserDep) -> PlaybackState:
+    """Clear all assets currently in the live queue."""
+    return await RadioService(session).clear_queue(user.email)
+
+
 @router.post("/play", response_model=PlaybackState)
 async def play(session: SessionDep, user: UserDep, song_id: int | None = Query(default=None)) -> PlaybackState:
     """Start one requested song or the next queued song."""

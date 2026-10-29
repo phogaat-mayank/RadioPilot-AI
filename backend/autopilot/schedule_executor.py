@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 
 from autopilot.autopilot_events import AutopilotEvent, AutopilotEventType
@@ -24,18 +24,24 @@ class ScheduleExecutor:
         self._event_bus = event_bus
         self._misfire_grace_seconds = misfire_grace_seconds
         self._triggered: set[int] = set()
+        self._prepared: set[int] = set()
 
     async def poll(self, now: datetime | None = None) -> tuple[ScheduleRef, ...]:
         """Publish one SCHEDULE_TRIGGERED event per newly due schedule entry."""
         current = now or datetime.now(timezone.utc)
         due: list[ScheduleRef] = []
         for entry in await self._provider():
+            preparation_minutes = int(entry.payload.get("preparation_minutes", 10)) if isinstance(entry.payload.get("preparation_minutes", 10), int) else 10
+            if entry.enabled and entry.event_type.lower() == "news" and entry.id not in self._prepared and current >= entry.run_at - timedelta(minutes=max(1, preparation_minutes)) and current < entry.run_at:
+                self._prepared.add(entry.id)
+                await self._event_bus.publish(AutopilotEvent(AutopilotEventType.SCHEDULE_TRIGGERED, {"schedule_id": entry.id, "event_type": "news", "phase": "prepare", **dict(entry.payload)}, source="schedule_executor"))
+                logger.info("Autopilot news preparation window opened", extra={"schedule_id": entry.id})
             age_seconds = (current - entry.run_at).total_seconds()
             if not entry.enabled or entry.id in self._triggered or entry.run_at > current or age_seconds > self._misfire_grace_seconds:
                 continue
             self._triggered.add(entry.id)
             due.append(entry)
-            await self._event_bus.publish(AutopilotEvent(AutopilotEventType.SCHEDULE_TRIGGERED, {"schedule_id": entry.id, "event_type": entry.event_type, "playlist_id": entry.playlist_id, **dict(entry.payload)}, source="schedule_executor"))
+            await self._event_bus.publish(AutopilotEvent(AutopilotEventType.SCHEDULE_TRIGGERED, {"schedule_id": entry.id, "event_type": entry.event_type, "playlist_id": entry.playlist_id, "phase": "broadcast", **dict(entry.payload)}, source="schedule_executor"))
             logger.info("Autopilot schedule became due", extra={"schedule_id": entry.id, "event_type": entry.event_type})
         return tuple(due)
 

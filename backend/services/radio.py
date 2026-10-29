@@ -56,6 +56,12 @@ class RadioService:
         await self.log("playback", f"Queued {song.title}", actor, {"song_id": song.id})
         return await self.emit_state()
 
+    async def clear_queue(self, actor: str) -> PlaybackState:
+        """Clear all pending assets from the broadcast queue."""
+        count = await playback_controller.clear_queue()
+        await self.log("playback", f"Cleared live queue ({count} items)", actor, {"cleared_count": count})
+        return await self.emit_state()
+
     async def play(self, song_id: int | None, actor: str) -> PlaybackState:
         """Execute playback via the controller, never via an AI workflow."""
         song = await self._require_song(song_id) if song_id is not None else None

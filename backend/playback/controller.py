@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
 import socket
@@ -13,6 +14,36 @@ from typing import Protocol
 from models.entities import Song
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SongSnapshot:
+    """Session-decoupled song representation that prevents DetachedInstanceError."""
+    id: int
+    title: str
+    artist: str
+    album: str | None
+    genre: str | None
+    duration_seconds: float
+    file_path: str
+
+    @classmethod
+    def from_song(cls, song: object | None) -> SongSnapshot | None:
+        """Create a detached snapshot from an ORM entity or dict."""
+        if song is None:
+            return None
+        if isinstance(song, cls):
+            return song
+        return cls(
+            id=int(getattr(song, "id")),
+            title=str(getattr(song, "title", "Unknown Title")),
+            artist=str(getattr(song, "artist", "Unknown Artist")),
+            album=getattr(song, "album", None),
+            genre=getattr(song, "genre", None),
+            duration_seconds=float(getattr(song, "duration_seconds", 0.0) or 0.0),
+            file_path=str(getattr(song, "file_path", "")),
+        )
+
 
 
 class AudioEngine(Protocol):
@@ -115,9 +146,9 @@ class PlaybackController:
     def __init__(self, engine: AudioEngine | None = None) -> None:
         """Create a controller backed by a safely swappable audio engine."""
         self._engine = engine or NullAudioEngine()
-        self._queue: deque[Song] = deque()
-        self._history: deque[Song] = deque(maxlen=100)
-        self._current: Song | None = None
+        self._queue: deque[SongSnapshot] = deque()
+        self._history: deque[SongSnapshot] = deque(maxlen=100)
+        self._current: SongSnapshot | None = None
         self._status = "stopped"
         self._position_seconds = 0.0
         self._started_at: datetime | None = None
@@ -125,25 +156,38 @@ class PlaybackController:
         self._playback_revision = 0
         self._lock = asyncio.Lock()
 
-    async def queue(self, song: Song) -> None:
+    async def queue(self, song: Song | SongSnapshot) -> None:
         """Append an asset to the playback queue."""
-        async with self._lock:
-            self._queue.append(song)
+        snapshot = SongSnapshot.from_song(song)
+        if snapshot:
+            async with self._lock:
+                self._queue.append(snapshot)
 
-    async def queue_many(self, songs: list[Song]) -> None:
+    async def queue_many(self, songs: list[Song | SongSnapshot]) -> None:
         """Append a validated sequence of assets."""
+        snapshots = [s for s in (SongSnapshot.from_song(song) for song in songs) if s]
         async with self._lock:
-            self._queue.extend(songs)
+            self._queue.extend(snapshots)
 
-    async def interrupt_with_playlist(self, songs: list[Song]) -> None:
+    async def clear_queue(self) -> int:
+        """Clear all pending items from the playback queue."""
+        async with self._lock:
+            count = len(self._queue)
+            self._queue.clear()
+            return count
+
+    async def interrupt_with_playlist(self, songs: list[Song | SongSnapshot]) -> None:
         """Start a priority playlist and retain the interrupted queue for resumption."""
         if not songs:
             raise ValueError("Cannot interrupt playback with an empty playlist")
+        snapshots = [s for s in (SongSnapshot.from_song(song) for song in songs) if s]
+        if not snapshots:
+            raise ValueError("No valid songs found in playlist")
         async with self._lock:
             resume_queue = deque(self._queue)
             if self._current is not None:
                 resume_queue.appendleft(self._current)
-            target, remaining = songs[0], songs[1:]
+            target, remaining = snapshots[0], snapshots[1:]
             self._queue = deque(remaining)
             self._queue.extend(resume_queue)
             self._engine.play(target.file_path)
@@ -151,10 +195,10 @@ class PlaybackController:
             self._position_seconds, self._started_at = 0.0, datetime.now(timezone.utc)
             self._playback_revision += 1
 
-    async def play(self, song: Song | None = None) -> None:
+    async def play(self, song: Song | SongSnapshot | None = None) -> None:
         """Start a supplied asset or the next queued asset."""
         async with self._lock:
-            target = song or (self._queue.popleft() if self._queue else None)
+            target = SongSnapshot.from_song(song) if song is not None else (self._queue.popleft() if self._queue else None)
             if target is None:
                 raise ValueError("Cannot play: queue is empty")
             if self._current and self._current.id != target.id:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from datetime import datetime, timezone
 import logging
@@ -18,8 +19,10 @@ from autopilot.schedule_executor import ScheduleExecutor
 from autopilot.state_manager import StateManager
 from core.config import settings
 from database.session import SessionLocal
+from sqlalchemy.ext.asyncio import AsyncSession
 from repositories.radio import RadioRepository
 from services.radio import RadioService
+from tools.news_tool import NewsTool
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +175,12 @@ class AutopilotRuntime:
             if action.action_type is ActionType.SKIP_TRACK:
                 await service.command("skip", actor="autopilot")
                 return
+            if action.action_type is ActionType.PREPARE_NEWS:
+                await self._prepare_news(session, service, action)
+                return
+            if action.action_type is ActionType.PLAY_NEWS:
+                await self._broadcast_news(session, service, action)
+                return
             await service.log("autopilot", "Autopilot decision recorded", "autopilot", action.to_dict())
             logger.info("Autopilot action has no matching station execution capability", extra={"action": action.action_type.value})
 
@@ -182,6 +191,50 @@ class AutopilotRuntime:
         if not isinstance(raw_ids, (list, tuple)):
             return ()
         return tuple(item for item in raw_ids if isinstance(item, int) and item > 0)
+
+    async def _prepare_news(self, session: AsyncSession, service: RadioService, action: AutopilotAction) -> None:
+        schedule_id = action.payload.get("schedule_id")
+        if not isinstance(schedule_id, int):
+            raise ValueError("PREPARE_NEWS requires schedule_id")
+        repository = RadioRepository(session)
+        schedule = await repository.get_schedule(schedule_id)
+        if not schedule:
+            raise LookupError("News schedule not found")
+        duration = int(action.payload.get("duration_seconds", 60))
+        mix = action.payload.get("mix", ["headlines", "weather", "station"])
+        bulletin = await NewsTool.automatic_bulletin(duration, mix if isinstance(mix, list) else None)
+        schedule.metadata_json = {**(schedule.metadata_json or {}), **bulletin}
+        await session.commit()
+        await service.log("news", "Autopilot prepared news bulletin", "autopilot", {"schedule_id": schedule_id, "bullet_count": len(bulletin["bullets"])})
+
+    async def _broadcast_news(self, session: AsyncSession, service: RadioService, action: AutopilotAction) -> None:
+        schedule_id = action.payload.get("schedule_id")
+        schedule = await RadioRepository(session).get_schedule(schedule_id) if isinstance(schedule_id, int) else None
+        bulletin = (schedule.metadata_json or {}) if schedule else {}
+        if not bulletin.get("bullets"):
+            bulletin = await NewsTool.automatic_bulletin(int(action.payload.get("duration_seconds", 60)))
+        if schedule:
+            schedule.metadata_json = {
+                **(schedule.metadata_json or {}),
+                **bulletin,
+                "broadcast_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await session.commit()
+        playback = await service.state()
+        duration = max(30, min(120, int(bulletin.get("duration_seconds", action.payload.get("duration_seconds", 60)))))
+        if playback.status == "playing":
+            await service.command("pause", actor="autopilot_news")
+            asyncio.create_task(self._resume_after_news(duration), name=f"radiopilot-news-resume-{schedule_id}")
+        await service.log("news", "Autopilot news bulletin triggered", "autopilot", {"schedule_id": schedule_id, **bulletin})
+
+    async def _resume_after_news(self, duration_seconds: int) -> None:
+        """Resume a paused Autopilot music bed after its bounded spoken bulletin."""
+        await asyncio.sleep(duration_seconds)
+        async with SessionLocal() as session:
+            service = RadioService(session)
+            state = await service.state()
+            if state.mode == "AUTOPILOT" and state.status == "paused":
+                await service.command("resume", actor="autopilot_news")
 
 
 autopilot_runtime = AutopilotRuntime()
