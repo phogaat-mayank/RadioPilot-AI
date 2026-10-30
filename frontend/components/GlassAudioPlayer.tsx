@@ -8,9 +8,6 @@ import {
   Play,
   Repeat,
   RotateCcw,
-  Volume1,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
 
 type Song = {
@@ -25,10 +22,7 @@ type Props = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   audioUrl: string | null;
   isPlaying: boolean;
-  volume: number;
   onTogglePlay: () => void;
-  onVolumeChange: (vol: number) => void;
-  onToggleMute: () => void;
   onEnded: () => void;
   currentSong?: Song | null;
   className?: string;
@@ -45,10 +39,7 @@ export default function GlassAudioPlayer({
   audioRef,
   audioUrl,
   isPlaying,
-  volume,
   onTogglePlay,
-  onVolumeChange,
-  onToggleMute,
   onEnded,
   currentSong,
   className = "",
@@ -226,36 +217,6 @@ export default function GlassAudioPlayer({
             style={{
               left: `${progressPercent}%`,
             }}
-          />
-        </div>
-
-        {/* Volume / Mute Button */}
-        <button
-          type="button"
-          onClick={onToggleMute}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-300 hover:text-white transition hover:bg-white/10 active:scale-95 cursor-pointer"
-          title={volume === 0 ? "Unmute audio" : "Mute audio"}
-          aria-label={volume === 0 ? "Unmute" : "Mute"}
-        >
-          {volume === 0 ? (
-            <VolumeX size={17} className="text-[#EB4203] animate-in zoom-in-75 duration-150" />
-          ) : volume < 40 ? (
-            <Volume1 size={17} className="text-slate-300 group-hover:text-[#00CEC8]" />
-          ) : (
-            <Volume2 size={17} className="text-slate-300 group-hover:text-[#00CEC8]" />
-          )}
-        </button>
-
-        {/* Mini Volume Slider */}
-        <div className="hidden sm:flex items-center w-16 md:w-20 shrink-0">
-          <input
-            aria-label="Audio player volume"
-            value={volume}
-            type="range"
-            min="0"
-            max="100"
-            className="w-full accent-[#00CEC8] cursor-pointer h-1.5 bg-white/15 rounded-full"
-            onChange={(e) => onVolumeChange(Number(e.target.value))}
           />
         </div>
 

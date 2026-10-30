@@ -469,7 +469,6 @@ export default function Home() {
                   audioRef={audioRef}
                   audioUrl={audioUrl}
                   isPlaying={station?.status === "playing"}
-                  volume={station?.volume ?? 75}
                   onTogglePlay={() =>
                     void invoke(
                       station?.status === "playing"
@@ -480,8 +479,6 @@ export default function Home() {
                       { method: "POST" }
                     )
                   }
-                  onVolumeChange={setVolume}
-                  onToggleMute={toggleMute}
                   onEnded={() =>
                     void invoke("/station/track-ended", {
                       method: "POST",
