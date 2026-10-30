@@ -139,7 +139,13 @@ class AutopilotRuntime:
                 playlist_id = action.payload.get("playlist_id")
                 if not isinstance(playlist_id, int):
                     raise ValueError("PLAY_PLAYLIST requires an integer playlist_id")
-                await service.run_playlist(playlist_id, actor="autopilot", interrupt_current=isinstance(action.payload.get("schedule_id"), int))
+                sched_id = action.payload.get("schedule_id")
+                await service.run_playlist(playlist_id, actor="autopilot", interrupt_current=isinstance(sched_id, int))
+                if isinstance(sched_id, int):
+                    sched = await RadioRepository(session).get_schedule(sched_id)
+                    if sched:
+                        sched.enabled = False
+                        await session.commit()
                 return
             if action.action_type in {ActionType.LOAD_QUEUE, ActionType.PLAY_ADS, ActionType.PLAY_JINGLE}:
                 song_ids = self._song_ids(action)
@@ -219,6 +225,7 @@ class AutopilotRuntime:
                 **bulletin,
                 "broadcast_at": datetime.now(timezone.utc).isoformat(),
             }
+            schedule.enabled = False
             await session.commit()
         playback = await service.state()
         duration = max(30, min(120, int(bulletin.get("duration_seconds", action.payload.get("duration_seconds", 60)))))

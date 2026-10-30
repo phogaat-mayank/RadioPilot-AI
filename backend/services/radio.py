@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,7 +112,14 @@ class RadioService:
 
     async def schedule(self, payload: ScheduleCreate) -> Schedule:
         """Persist a schedule; scheduler registration is handled by caller."""
-        return await self.repository.add_schedule(Schedule(**payload.model_dump()))
+        data = payload.model_dump()
+        station_tz = ZoneInfo("Asia/Kolkata")
+        run_at: datetime = data["run_at"]
+        if run_at.tzinfo is None:
+            data["run_at"] = run_at.replace(tzinfo=station_tz).astimezone(timezone.utc)
+        else:
+            data["run_at"] = run_at.astimezone(timezone.utc)
+        return await self.repository.add_schedule(Schedule(**data))
 
     async def run_playlist(self, playlist_id: int, actor: str = "scheduler", interrupt_current: bool = False) -> PlaybackState:
         """Queue a playlist or play it immediately while preserving the prior queue."""

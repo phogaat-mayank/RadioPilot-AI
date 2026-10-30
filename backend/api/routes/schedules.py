@@ -1,6 +1,6 @@
 """Scheduling endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from api.deps import SessionDep, UserDep
 from repositories.radio import RadioRepository
 from scheduler.service import station_scheduler
@@ -11,9 +11,13 @@ router = APIRouter(prefix="/schedules", tags=["scheduler"])
 
 
 @router.get("", response_model=list[ScheduleOut])
-async def list_schedules(session: SessionDep, _: UserDep) -> list[ScheduleOut]:
-    """List programmed events."""
-    return list(await RadioRepository(session).list_schedules())
+async def list_schedules(
+    session: SessionDep,
+    _: UserDep,
+    upcoming: bool = Query(default=True),
+) -> list[ScheduleOut]:
+    """List programmed events, defaulting to upcoming active ones."""
+    return list(await RadioRepository(session).list_schedules(upcoming_only=upcoming))
 
 
 @router.post("", response_model=ScheduleOut, status_code=201)
@@ -24,10 +28,23 @@ async def create_schedule(payload: ScheduleCreate, session: SessionDep, user: Us
     if payload.playlist_id and not await RadioRepository(session).get_playlist(payload.playlist_id):
         raise HTTPException(status_code=404, detail="Playlist not found")
     schedule = await RadioService(session).schedule(payload)
-    if payload.event_type == "playlist" and payload.playlist_id:
-        station_scheduler.register_playlist(schedule.id, payload.playlist_id, payload.run_at)
+    station_scheduler.register_schedule(
+        schedule.id,
+        schedule.event_type,
+        schedule.playlist_id,
+        schedule.run_at,
+        schedule.metadata_json,
+    )
     await RadioService(session).log("scheduler", f"Scheduled {schedule.name}", user.email, {"schedule_id": schedule.id})
     return schedule
+
+
+@router.delete("/cleanup/past", response_model=dict[str, int])
+async def cleanup_past_schedules(session: SessionDep, user: UserDep) -> dict[str, int]:
+    """Delete past expired/completed schedules."""
+    count = await RadioRepository(session).delete_past_schedules()
+    await RadioService(session).log("scheduler", f"Purged {count} past schedules", user.email)
+    return {"deleted": count}
 
 
 @router.delete("/{schedule_id}", status_code=204)
@@ -38,6 +55,8 @@ async def delete_schedule(schedule_id: int, session: SessionDep, user: UserDep) 
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule event not found")
     name = schedule.name
+    station_scheduler.unregister(schedule_id)
     await repository.delete_schedule(schedule)
     await RadioService(session).log("scheduler", f"Deleted schedule {name}", user.email, {"schedule_id": schedule_id})
+
 

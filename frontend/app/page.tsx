@@ -12,7 +12,9 @@ import {
   Search,
   SkipForward,
   Trash2,
+  Volume1,
   Volume2,
+  VolumeX,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -38,13 +40,41 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function formatApiError(detail: unknown): string {
+  if (!detail) return "Request failed";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const field = Array.isArray((item as { loc?: unknown[] }).loc)
+            ? (item as { loc: unknown[] }).loc.slice(1).join(".")
+            : "";
+          const msg = (item as { msg?: string }).msg || (item as { message?: string }).message || JSON.stringify(item);
+          return field ? `${field}: ${msg}` : String(msg);
+        }
+        return String(item);
+      })
+      .join("; ");
+  }
+  if (typeof detail === "object" && detail !== null) {
+    if ("msg" in detail) return String((detail as { msg: unknown }).msg);
+    if ("message" in detail) return String((detail as { message: unknown }).message);
+    return JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 async function request(path: string, token: string, init: RequestInit = {}) {
   const response = await fetch(`${API}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers },
   });
   if (!response.ok) {
-    const error = new Error((await response.json().catch(() => ({ detail: response.statusText }))).detail) as Error & {
+    const raw = await response.json().catch(() => ({ detail: response.statusText }));
+    const errorMsg = formatApiError(raw?.detail ?? response.statusText);
+    const error = new Error(errorMsg) as Error & {
       status?: number;
     };
     error.status = response.status;
@@ -65,6 +95,7 @@ export default function Home() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [navSection, setNavSection] = useState<"dashboard" | "library" | "playlists" | "scheduler" | "ai">("dashboard");
   const [operationsTab, setOperationsTab] = useState<"library" | "playlists" | "scheduler" | "logs">("library");
+  const [lastVolume, setLastVolume] = useState<number>(75);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const handleNav = (target: "dashboard" | "library" | "playlists" | "scheduler" | "ai") => {
@@ -109,7 +140,14 @@ export default function Home() {
   useEffect(() => {
     if (!token) return;
     const timer = window.setInterval(() => void refresh().catch(() => undefined), 2500);
-    return () => window.clearInterval(timer);
+    const handleStationRefresh = () => {
+      void refresh().catch(() => undefined);
+    };
+    window.addEventListener("station-refresh", handleStationRefresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("station-refresh", handleStationRefresh);
+    };
   }, [token]);
 
   useEffect(() => {
@@ -188,8 +226,22 @@ export default function Home() {
   };
 
   const setVolume = (value: number) => {
-    if (audioRef.current) audioRef.current.volume = value / 100;
+    if (value > 0) setLastVolume(value);
+    if (audioRef.current) {
+      audioRef.current.volume = value / 100;
+      audioRef.current.muted = value === 0;
+    }
     void invoke("/station/volume", { method: "PUT", body: JSON.stringify({ volume: value }) });
+  };
+
+  const toggleMute = () => {
+    const current = station?.volume ?? 75;
+    if (current > 0) {
+      setLastVolume(current);
+      setVolume(0);
+    } else {
+      setVolume(lastVolume > 0 ? lastVolume : 75);
+    }
   };
 
   const deleteSong = async (song: Song) => {
@@ -219,7 +271,7 @@ export default function Home() {
       <main className="grid min-h-screen place-items-center p-6">
         <form onSubmit={login} className="panel login-card w-full max-w-md space-y-6 p-8">
           <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#bbf246] text-[#0c1803] shadow-lg shadow-[#bbf246]/25">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#00CEC8] text-[#032023] shadow-lg shadow-[#00CEC8]/25">
               <Radio size={24} />
             </div>
             <div>
@@ -248,7 +300,7 @@ export default function Home() {
           {error && <p className="text-xs text-rose-400">{error}</p>}
           <button
             disabled={loading}
-            className="w-full rounded-xl bg-[#bbf246] hover:bg-[#a8e030] py-3.5 text-sm font-bold text-[#0c1803] shadow-lg shadow-[#bbf246]/30 transition"
+            className="w-full rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] py-3.5 text-sm font-bold text-[#032023] shadow-lg shadow-[#00CEC8]/30 transition"
           >
             {loading ? "Signing in..." : "Enter Station Control"}
           </button>
@@ -262,8 +314,8 @@ export default function Home() {
       <header className="mx-auto mb-7 flex max-w-7xl flex-wrap items-center justify-between gap-4">
         {/* Left: Round Search / Brand Icon Capsule */}
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur-xl shadow-lg">
-            <Radio size={20} className="text-[#bbf246]" />
+          <div className="glass-capsule-bar grid h-11 w-11 place-items-center rounded-full text-white">
+            <Radio size={20} className="text-[#00CEC8]" />
           </div>
           <div className="hidden sm:block">
             <h1 className="text-base font-bold text-white tracking-wide">RadioPilot AI</h1>
@@ -309,8 +361,8 @@ export default function Home() {
         <div className="flex items-center gap-2">
           <div className="glass-capsule-bar flex items-center gap-2 px-3 py-1.5 text-xs">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#bbf246] opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#bbf246]"></span>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#EB4203] opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#EB4203]"></span>
             </span>
             <span className="font-semibold text-slate-200">On Air</span>
             <span className="text-slate-600">|</span>
@@ -321,7 +373,7 @@ export default function Home() {
               localStorage.removeItem("radiopilot_token");
               setToken(null);
             }}
-            className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 hover:text-white transition backdrop-blur-md"
+            className="glass-capsule-bar grid h-9 w-9 place-items-center rounded-full text-slate-400 hover:text-white transition"
             title="Sign out"
           >
             <LogOut size={14} />
@@ -337,8 +389,8 @@ export default function Home() {
               <span
                 className={
                   station?.status === "playing"
-                    ? "badge-lime pulse-live"
-                    : "badge-amber"
+                    ? "badge-vermilion pulse-live"
+                    : "badge-coral"
                 }
               >
                 ● {station?.status === "playing" ? "LIVE ON AIR" : (station?.status?.toUpperCase() ?? "STANDBY")}
@@ -352,8 +404,8 @@ export default function Home() {
                 }
                 className={
                   station?.mode === "AUTOPILOT"
-                    ? "badge-lime"
-                    : "badge-cyan"
+                    ? "badge-turquoise"
+                    : "badge-cream"
                 }
               >
                 <WandSparkles size={13} />
@@ -367,7 +419,7 @@ export default function Home() {
               <h2 className="mt-1 text-2xl md:text-3xl font-extrabold text-white tracking-tight">{title}</h2>
             </div>
 
-            {/* Tri-color Progress Bar (Matching the exact lime-cyan-amber progress line from reference image) */}
+            {/* Tri-color Progress Bar (Harmonized 4-Color Palette: #00CEC8, #FF9C5F, #FCEFC3) */}
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>{Math.floor(station?.current_position_seconds ?? 0)}s elapsed</span>
@@ -375,34 +427,34 @@ export default function Home() {
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 flex">
                 <div
-                  className="h-full bg-[#bbf246] transition-all"
+                  className="h-full bg-[#00CEC8] transition-all"
                   style={{
                     width: `${Math.min(100, Math.max(12, ((station?.current_position_seconds ?? 0) / (station?.current_song?.duration_seconds || 180)) * 100))}%`,
                   }}
                 />
-                <div className="h-full bg-[#22d3ee] w-12 shrink-0 opacity-80" />
-                <div className="h-full bg-[#fbbf24] flex-1 opacity-40" />
+                <div className="h-full bg-[#FF9C5F] w-12 shrink-0 opacity-80" />
+                <div className="h-full bg-[#FCEFC3] flex-1 opacity-40" />
               </div>
             </div>
 
             {/* 3 Circular/Squircle Stat Widgets (Direct homage to 8 In Progress / 12 Completed / 14 Up Coming from reference image) */}
             <div className="mt-6 grid grid-cols-3 gap-3">
               <div className="glass-subcard flex flex-col items-center justify-center p-3 text-center">
-                <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#bbf246] text-[#0c1803] font-bold shadow-md shadow-[#bbf246]/25">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#00CEC8] text-[#032023] font-bold shadow-md shadow-[#00CEC8]/25">
                   <ListMusic size={18} />
                 </div>
                 <span className="mt-2 text-xl font-extrabold text-white">{station?.queue.length ?? 0}</span>
                 <span className="text-[11px] text-slate-400">In Live Queue</span>
               </div>
               <div className="glass-subcard flex flex-col items-center justify-center p-3 text-center">
-                <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#22d3ee] text-[#031720] font-bold shadow-md shadow-[#22d3ee]/25">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#FF9C5F] text-[#2b1102] font-bold shadow-md shadow-[#FF9C5F]/25">
                   <Music2 size={18} />
                 </div>
                 <span className="mt-2 text-xl font-extrabold text-white">{songs.length}</span>
                 <span className="text-[11px] text-slate-400">Library Tracks</span>
               </div>
               <div className="glass-subcard flex flex-col items-center justify-center p-3 text-center">
-                <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#fbbf24] text-[#1e1101] font-bold shadow-md shadow-[#fbbf24]/25">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#FCEFC3] text-[#211802] font-bold shadow-md shadow-[#FCEFC3]/25">
                   <Radio size={18} />
                 </div>
                 <span className="mt-2 text-xl font-extrabold text-white">{station?.volume ?? 75}%</span>
@@ -451,17 +503,33 @@ export default function Home() {
                 <SkipForward size={20} />
               </button>
               <div className="ml-2 flex flex-1 items-center gap-3">
-                <Volume2 size={19} className="text-slate-400" />
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:text-white hover:border-white/20 hover:bg-white/10 transition cursor-pointer backdrop-blur-md shadow-sm active:scale-95"
+                  title={(station?.volume ?? 75) === 0 ? "Unmute audio (Click to restore)" : "Mute audio (Click to mute)"}
+                  aria-label={(station?.volume ?? 75) === 0 ? "Unmute audio" : "Mute audio"}
+                >
+                  {(station?.volume ?? 75) === 0 ? (
+                    <VolumeX size={19} className="text-[#EB4203] animate-in zoom-in-75 duration-150" />
+                  ) : (station?.volume ?? 75) < 40 ? (
+                    <Volume1 size={19} className="text-slate-300 hover:text-[#00CEC8] transition" />
+                  ) : (
+                    <Volume2 size={19} className="text-slate-300 hover:text-[#00CEC8] transition" />
+                  )}
+                </button>
                 <input
                   aria-label="Volume"
                   value={station?.volume ?? 75}
                   type="range"
                   min="0"
                   max="100"
-                  className="w-full accent-[#bbf246] cursor-pointer"
+                  className="w-full accent-[#00CEC8] cursor-pointer"
                   onChange={(e) => setVolume(Number(e.target.value))}
                 />
-                <span className="font-mono text-sm text-slate-300">{station?.volume ?? 75}</span>
+                <span className="font-mono text-sm text-slate-300 w-8 text-right shrink-0">
+                  {station?.volume ?? 75}
+                </span>
               </div>
             </div>
           </section>
@@ -470,10 +538,10 @@ export default function Home() {
           <section className="panel p-6">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ListMusic size={19} className="text-[#22d3ee]" />
+                <ListMusic size={19} className="text-[#00CEC8]" />
                 <h2 className="font-bold text-white">Live queue</h2>
                 {Boolean(station?.queue.length) && (
-                  <span className="badge-cyan text-[11px] py-0.5 px-2">
+                  <span className="badge-turquoise text-[11px] py-0.5 px-2">
                     {station?.queue.length}
                   </span>
                 )}
@@ -494,7 +562,7 @@ export default function Home() {
                     key={`${song.id}-${i}`}
                     className="glass-subcard flex items-center gap-3 px-3.5 py-2.5 text-xs"
                   >
-                    <span className="w-5 text-center font-mono font-bold text-[#bbf246]">{i + 1}</span>
+                    <span className="w-5 text-center font-mono font-bold text-[#00CEC8]">{i + 1}</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-slate-200">{song.title}</p>
                       <p className="truncate text-[11px] text-slate-400">{song.artist}</p>
@@ -515,7 +583,7 @@ export default function Home() {
 
         {/* RIGHT COLUMN */}
         <aside className="space-y-5">
-          <div id="operations-section">
+          <div id="operations-section" className="relative z-30">
             <OperationsWorkspace
               token={token}
               songs={songs}
@@ -531,7 +599,7 @@ export default function Home() {
           </div>
 
           {/* QUICK QUEUE PANEL */}
-          <section className="panel p-5">
+          <section className="panel p-5 relative z-10">
             <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <h2 className="font-bold text-sm text-slate-100">Quick queue</h2>
@@ -591,7 +659,7 @@ export default function Home() {
                       className="min-w-0 flex-1 text-left"
                       title={`Click to queue ${song.title}`}
                     >
-                      <p className="truncate text-xs font-medium text-slate-200 group-hover:text-[#bbf246] transition">
+                      <p className="truncate text-xs font-medium text-slate-200 group-hover:text-[#00CEC8] transition">
                         {song.title}
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -607,7 +675,7 @@ export default function Home() {
                             body: JSON.stringify({ song_id: song.id }),
                           })
                         }
-                        className="rounded-lg p-1.5 text-slate-400 opacity-70 group-hover:opacity-100 hover:bg-[#bbf246]/20 hover:text-[#bbf246] transition"
+                        className="rounded-lg p-1.5 text-slate-400 opacity-70 group-hover:opacity-100 hover:bg-[#00CEC8]/20 hover:text-[#00CEC8] transition"
                         title="Add to live queue"
                       >
                         <Plus size={14} />

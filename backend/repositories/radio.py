@@ -81,8 +81,8 @@ class RadioRepository:
         return result.rowcount
 
     async def list_playlists(self) -> Sequence[Playlist]:
-        """List playlists."""
-        return (await self.session.scalars(select(Playlist).order_by(Playlist.name))).all()
+        """List playlists with preloaded items and songs."""
+        return (await self.session.scalars(select(Playlist).options(selectinload(Playlist.items).selectinload(PlaylistSong.song)).order_by(Playlist.name))).all()
 
     async def get_playlist(self, playlist_id: int) -> Playlist | None:
         """Fetch a playlist and its ordered audio assets."""
@@ -140,9 +140,14 @@ class RadioRepository:
         await self.session.refresh(schedule)
         return schedule
 
-    async def list_schedules(self) -> Sequence[Schedule]:
-        """List schedule events chronologically."""
-        return (await self.session.scalars(select(Schedule).order_by(Schedule.run_at))).all()
+    async def list_schedules(self, upcoming_only: bool = False) -> Sequence[Schedule]:
+        """List schedule events chronologically, optionally filtering only upcoming ones."""
+        statement = select(Schedule).order_by(Schedule.run_at)
+        if upcoming_only:
+            from datetime import datetime, timedelta, timezone
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+            statement = statement.where(Schedule.enabled.is_(True), Schedule.run_at >= cutoff)
+        return (await self.session.scalars(statement)).all()
 
     async def get_schedule(self, schedule_id: int) -> Schedule | None:
         """Fetch one schedule event."""
@@ -152,3 +157,12 @@ class RadioRepository:
         """Remove a schedule event."""
         await self.session.delete(schedule)
         await self.session.commit()
+
+    async def delete_past_schedules(self) -> int:
+        """Purge expired past schedules to keep the table clean."""
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+        stmt = delete(Schedule).where((Schedule.enabled.is_(False)) | (Schedule.run_at < cutoff))
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount

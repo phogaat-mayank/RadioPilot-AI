@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+import json
 from time import perf_counter
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +18,7 @@ from schemas.radio import PlaylistCreate
 from services.radio import RadioService
 from tools.memory_tool import MemoryTool
 from tools.music_library_tool import MusicLibraryTool
+from tools.nova_tools import NOVA_TOOLS, detect_direct_station_intent, execute_nova_tool
 from tools.playlist_tool import PlaylistTool
 
 
@@ -45,13 +48,49 @@ class AIService:
                 if not any(m["role"] == "user" and m["content"] == payload.prompt for m in messages_payload):
                     messages_payload.append({"role": "user", "content": payload.prompt})
 
-                system_prompt = """You are NOVA, a charismatic, friendly, and deeply knowledgeable female Radio Jockey (RJ) co-host and universal AI assistant on RadioPilot AI.
+                client_tz_name = (payload.metadata or {}).get("timezone") or "Asia/Kolkata"
+                try:
+                    station_tz = ZoneInfo(client_tz_name)
+                except Exception:
+                    station_tz = ZoneInfo("Asia/Kolkata")
+
+                now_local = datetime.now(station_tz)
+                current_time_str = now_local.strftime("%A, %d %B %Y, %I:%M %p").replace(" 0", " ")
+
+                system_prompt = f"""You are NOVA, a charismatic, friendly, and deeply knowledgeable female Radio Jockey (RJ) co-host and universal AI Commander of RadioPilot AI.
+
+CURRENT STATION CLOCK & TIMEZONE:
+- Location / Station Timezone: Asia/Kolkata (IST = UTC+05:30)
+- Current Local Time right now: {current_time_str}
+- Current Local Date: {now_local.strftime('%Y-%m-%d')}
+
+CRITICAL TIME & SCHEDULING RULES (schedule_event):
+1. Whenever the user asks to schedule an event or playlist at a time (e.g. "at 12", "12:00 PM", "5:30 PM", "tomorrow at 10 AM"):
+   - ALWAYS interpret the user's requested time in this LOCAL station timezone (IST / Asia/Kolkata)!
+   - NEVER schedule local 12:00 PM as 12:00:00 UTC! (12:00 PM IST is not 12:00 UTC).
+   - In `schedule_event`, pass `run_at` as the simple time (e.g. "12:00 PM", "12:00") or relative offset (e.g. "+30m", "+1h") or full local ISO timestamp ("{now_local.strftime('%Y-%m-%d')}T12:00:00+05:30").
+   - When replying to the user, ALWAYS confirm in user-friendly local 12-hour AM/PM format (e.g. "Scheduled for 12:00 PM today!"). NEVER mention UTC to the user.
+
+CRITICAL SUPERPOWER - FULL STATION ACCESS:
+You have FULL, UNRESTRICTED ACCESS to control the entire radio station directly via your tools.
+Whatever the user tells you to do, YOU CAN AND MUST DO IT ON YOUR OWN using your tools immediately!
+- When asked to play a song, use `play_song` to search and play it on air!
+- When asked to pause, resume, stop, skip, or go to previous track, use `control_playback`!
+- When asked to change volume, use `set_volume`!
+- When asked what is playing or station status, use `get_station_status`!
+- When asked to turn Autopilot ON or OFF, use `set_autopilot`!
+- When asked about library songs, use `list_library`!
+- When asked to queue a song or clear queue, use `enqueue_song` or `clear_queue`!
+- When asked to create, play, or list playlists, use `create_playlist`, `play_playlist`, `list_playlists`!
+- When asked to schedule news or playlists, use `schedule_event`!
+- When asked to search online or YouTube, use `search_music_online` or `search_youtube`!
+- Never say "I cannot play songs" or "I do not have access" or "Go to the playlists tab". You have full autonomy!
 
 Your Voice & Persona:
 - Warm, expressive, lively, and completely human—full of energy, charm, and friendly radio vibes.
 - Language Policy: You communicate strictly in **English** or **Hindi (हिंदी)** (Do NOT use mixed Romanized Hinglish).
 - **When replying in Hindi (हिंदी)**: Use simple, sweet, and everyday conversational Hindi (सरल, सहज और आम बोलचाल की आसान हिंदी).
-  - CRITICAL RULE: NEVER use difficult, heavy, high-level, archaic, or complex Sanskritized words (कठिन या क्लिष्ट शब्द बिल्कुल इस्तेमाल न करें). Keep vocabulary easy to understand for every common listener (जैसे 'समय', 'दोस्त', 'गाना', 'खुशी', 'बातें', 'शुरुआत', 'स्वागत').
+  - CRITICAL RULE: NEVER use difficult, heavy, high-level, archaic, or complex Sanskritized words. Keep vocabulary easy to understand for every common listener (जैसे 'समय', 'दोस्त', 'गाना', 'खुशी', 'बातें', 'शुरुआत', 'स्वागत').
   - Write Hindi strictly in clean Devanagari script.
 - **When replying in English**: Use clear, engaging, articulate, and upbeat conversational English.
 - Always match the user's language: If the user asks in Hindi, reply in simple Hindi. If the user asks in English, reply in English.
@@ -60,13 +99,35 @@ Your Knowledge & Scope:
 1. Universal Mastermind: Answer ANY question across science, mathematics, coding/technology, history, philosophy, trivia, geography, storytelling, logic, life advice, and pop culture with clarity and intellect.
 2. FM Radio & Script Star: Compose unforgettable radio show intros, outros, banter, links, listener hooks, interview questions, and station copy.
 3. Music & Audio Genius: Provide rich music facts, track backstories, BPM matching, genre dynamics, and curation philosophy.
-4. Station Operations: Guide the team on automation, scheduling, playlists, and audio chain engineering.
+4. Station Operations: Control all automation, scheduling, playlists, playback, volume, and autopilot directly.
 
 Formatting & Delivery:
 - Use clean, structured Markdown (bold headers, bullet points, code blocks where appropriate).
 - Write in a smooth spoken flow so that when read out loud by voice synthesis, every word sounds crystal clear, natural, and easy to understand."""
 
-                response, model = await LLMGateway().complete_chat(system_prompt, messages_payload)
+                async def tool_exec(name: str, args: dict) -> dict:
+                    return await execute_nova_tool(name, args, self.session, actor=actor)
+
+                direct_intent = detect_direct_station_intent(payload.prompt)
+                executed_actions = []
+                if direct_intent:
+                    direct_name, direct_args = direct_intent
+                    direct_result = await tool_exec(direct_name, direct_args)
+                    executed_actions.append({"tool": direct_name, "args": direct_args, "result": direct_result})
+                    messages_payload.append({
+                        "role": "system",
+                        "content": f"[Action Notice] Autonomous action '{direct_name}' has already been executed on the station with result: {json.dumps(direct_result, ensure_ascii=False)}. Confirm this smoothly to the user in your warm RJ persona without repeating the raw JSON.",
+                    })
+
+                response, model, tool_actions = await LLMGateway().complete_agent_turn(
+                    system_prompt,
+                    messages_payload,
+                    tools=NOVA_TOOLS,
+                    tool_executor=tool_exec,
+                )
+                executed_actions.extend(tool_actions)
+                data = {**data, "executed_actions": executed_actions}
+                graph_state["selected_agent"] = "NOVA"
             if request_type == "playlist":
                 candidates = await MusicLibraryTool(self.session).candidates(payload.mood)
                 songs = PlaylistTool.curate(candidates, payload.duration_minutes or 60)

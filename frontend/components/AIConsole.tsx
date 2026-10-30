@@ -406,30 +406,10 @@ export default function AIConsole({ token }: Props) {
     }
   };
 
-  // Send message to NOVA
+  // Send message to NOVA with full station control
   const sendMessage = async (promptToSend: string) => {
     const text = promptToSend.trim();
     if (!text || loading) return;
-
-    const song = requestedSong(text);
-    if (song) {
-      const userMsg: ChatMessage = {
-        id: Date.now(),
-        role: "user",
-        content: text,
-        created_at: new Date().toISOString(),
-      };
-      const assistantMsg: ChatMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content: `🎶 Searching and launching **${song}** on YouTube...`,
-        created_at: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
-      setInputPrompt("");
-      void openYouTube(song);
-      return;
-    }
 
     const userMsg: ChatMessage = {
       id: Date.now(),
@@ -443,6 +423,7 @@ export default function AIConsole({ token }: Props) {
     setLoading(true);
 
     try {
+      const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
       const result = await fetch(`${API}/ai/chat`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -451,6 +432,11 @@ export default function AIConsole({ token }: Props) {
           session_id: "dashboard",
           mood: "balanced",
           duration_minutes: 60,
+          metadata: {
+            timezone: clientTz,
+            timezone_offset_minutes: -new Date().getTimezoneOffset(),
+            local_time: new Date().toISOString(),
+          },
         }),
       });
       const data = await result.json();
@@ -467,6 +453,8 @@ export default function AIConsole({ token }: Props) {
 
       setMessages((prev) => [...prev, assistantMsg]);
       if (data.mode) setStatus(data);
+      // Immediately refresh station state, current playing track, volume, and playlists
+      window.dispatchEvent(new Event("station-refresh"));
     } catch (error) {
       const errMsg: ChatMessage = {
         id: Date.now() + 1,
@@ -670,16 +658,16 @@ export default function AIConsole({ token }: Props) {
         return (
           <div key={index} className="my-2 overflow-hidden rounded-lg border border-white/10 bg-slate-950/60 backdrop-blur-md">
             <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-3 py-1.5 text-xs text-slate-400">
-              <span className="font-mono text-cyan-300">{lang || "code"}</span>
+              <span className="font-mono text-[#00CEC8]">{lang || "code"}</span>
               <button
                 onClick={() => copyToClipboard(`code-${index}`, codeText)}
                 className="flex items-center gap-1 text-slate-300 hover:text-white"
               >
-                {copiedId === `code-${index}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                {copiedId === `code-${index}` ? <Check size={12} className="text-[#00CEC8]" /> : <Copy size={12} />}
                 <span className="text-[10px]">{copiedId === `code-${index}` ? "Copied" : "Copy"}</span>
               </button>
             </div>
-            <pre className="overflow-x-auto p-3 font-mono text-xs text-cyan-200">{codeText}</pre>
+            <pre className="overflow-x-auto p-3 font-mono text-xs text-[#00CEC8]">{codeText}</pre>
           </div>
         );
       }
@@ -692,14 +680,14 @@ export default function AIConsole({ token }: Props) {
 
             if (line.startsWith("### ")) {
               return (
-                <h4 key={lIdx} className="mt-2 text-sm font-bold text-sky-300">
+                <h4 key={lIdx} className="mt-2 text-sm font-bold text-[#FF9C5F]">
                   {formatInline(line.slice(4))}
                 </h4>
               );
             }
             if (line.startsWith("## ")) {
               return (
-                <h3 key={lIdx} className="mt-3 text-base font-bold text-cyan-200">
+                <h3 key={lIdx} className="mt-3 text-base font-bold text-[#00CEC8]">
                   {formatInline(line.slice(3))}
                 </h3>
               );
@@ -715,7 +703,7 @@ export default function AIConsole({ token }: Props) {
             if (line.match(/^[\*\-•]\s+/)) {
               return (
                 <div key={lIdx} className="flex items-start gap-2 pl-1 text-slate-200">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400" />
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CEC8]" />
                   <span className="flex-1">{formatInline(line.replace(/^[\*\-•]\s+/, ""))}</span>
                 </div>
               );
@@ -725,7 +713,7 @@ export default function AIConsole({ token }: Props) {
             if (numMatch) {
               return (
                 <div key={lIdx} className="flex items-start gap-2 pl-1 text-slate-200">
-                  <span className="shrink-0 font-bold text-cyan-400">{numMatch[1]}.</span>
+                  <span className="shrink-0 font-bold text-[#00CEC8]">{numMatch[1]}.</span>
                   <span className="flex-1">{formatInline(numMatch[2])}</span>
                 </div>
               );
@@ -735,7 +723,7 @@ export default function AIConsole({ token }: Props) {
               return (
                 <blockquote
                   key={lIdx}
-                  className="my-1 border-l-2 border-cyan-500 bg-cyan-950/20 py-1 pl-3 text-xs italic text-slate-300"
+                  className="my-1 border-l-2 border-[#00CEC8] bg-[#00CEC8]/10 py-1 pl-3 text-xs italic text-slate-300"
                 >
                   {formatInline(line.slice(2))}
                 </blockquote>
@@ -758,7 +746,7 @@ export default function AIConsole({ token }: Props) {
     return tokens.map((token, idx) => {
       if (token.startsWith("`") && token.endsWith("`")) {
         return (
-          <code key={idx} className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-xs text-amber-300">
+          <code key={idx} className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-xs text-[#FCEFC3]">
             {token.slice(1, -1)}
           </code>
         );
@@ -787,18 +775,18 @@ export default function AIConsole({ token }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-white/5 p-4 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#bbf246] text-[#0c1803] shadow-lg shadow-[#bbf246]/25">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#00CEC8] text-[#032023] shadow-lg shadow-[#00CEC8]/25">
               <Sparkles size={20} />
             </div>
             <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#bbf246] opacity-75"></span>
-              <span className="relative inline-flex h-3 w-3 rounded-full bg-[#bbf246]"></span>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#EB4203] opacity-75"></span>
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-[#EB4203]"></span>
             </span>
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-white">NOVA · Live AI Studio</h2>
-              <span className="badge-cyan text-[10px] py-0.5 px-2">
+              <span className="badge-turquoise text-[10px] py-0.5 px-2">
                 🎙️ Indian Female Voice
               </span>
             </div>
@@ -830,8 +818,8 @@ export default function AIConsole({ token }: Props) {
           <span
             className={
               status?.autopilot_enabled
-                ? "badge-lime text-xs"
-                : "badge-amber text-xs"
+                ? "badge-turquoise text-xs"
+                : "badge-coral text-xs"
             }
           >
             {status?.mode ?? "MANUAL"}
@@ -860,7 +848,7 @@ export default function AIConsole({ token }: Props) {
                 className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-bold shadow-md ${
                   isUser
                     ? "bg-white text-slate-950"
-                    : "bg-[#bbf246] text-[#0c1803] shadow-[#bbf246]/20"
+                    : "bg-[#00CEC8] text-[#032023] shadow-[#00CEC8]/20"
                 }`}
               >
                 {isUser ? <User size={15} /> : <Bot size={15} />}
@@ -868,15 +856,15 @@ export default function AIConsole({ token }: Props) {
 
               {/* Message Bubble */}
               <div
-                className={`group relative max-w-[85%] rounded-2xl p-4 shadow-md transition-all ${
+                className={`group relative max-w-[85%] rounded-2xl p-4 transition-all ${
                   isUser
-                    ? "bg-white/10 text-white rounded-tr-none border border-white/10 backdrop-blur-md"
-                    : "glass-subcard text-slate-100 rounded-tl-none border border-white/10 backdrop-blur-md"
+                    ? "bg-white/[0.09] text-white rounded-tr-none border border-white/20 backdrop-blur-xl shadow-lg [box-shadow:inset_0_1px_1px_rgba(255,255,255,0.25)]"
+                    : "glass-subcard text-slate-100 rounded-tl-none"
                 }`}
               >
                 {/* Header info */}
                 <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] opacity-75">
-                  <span className="font-semibold text-[#bbf246]">{isUser ? "You" : "NOVA"}</span>
+                  <span className="font-semibold text-[#00CEC8]">{isUser ? "You" : "NOVA"}</span>
                   {msg.created_at && (
                     <span>
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -900,8 +888,8 @@ export default function AIConsole({ token }: Props) {
                       >
                         {copiedId === msg.id ? (
                           <>
-                            <Check size={12} className="text-[#bbf246]" />
-                            <span className="text-[10px] text-[#bbf246]">Copied</span>
+                            <Check size={12} className="text-[#00CEC8]" />
+                            <span className="text-[10px] text-[#00CEC8]">Copied</span>
                           </>
                         ) : (
                           <>
@@ -913,7 +901,7 @@ export default function AIConsole({ token }: Props) {
 
                       <button
                         onClick={() => (isSpeaking ? stopSpeaking() : speak(msg.id, msg.content))}
-                        className={`badge-lime text-[11px] px-2.5 py-1 ${
+                        className={`badge-coral text-[11px] px-2.5 py-1 ${
                           isSpeaking ? "animate-pulse" : ""
                         }`}
                         title={isSpeaking ? "Stop voice" : "Listen to NOVA in authentic female voice"}
@@ -938,11 +926,11 @@ export default function AIConsole({ token }: Props) {
         {/* Loading Bubble */}
         {loading && (
           <div className="flex items-start gap-3 animate-in fade-in duration-150">
-            <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#bbf246] text-[#0c1803]">
+            <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#00CEC8] text-[#032023]">
               <Sparkles size={15} className="animate-spin" />
             </div>
             <div className="glass-subcard flex items-center gap-2 rounded-2xl rounded-tl-none p-4 text-xs text-slate-300">
-              <LoaderCircle className="animate-spin text-[#bbf246]" size={16} />
+              <LoaderCircle className="animate-spin text-[#00CEC8]" size={16} />
               <span className="font-medium">NOVA is thinking and preparing the broadcast answer...</span>
             </div>
           </div>
@@ -951,14 +939,14 @@ export default function AIConsole({ token }: Props) {
 
       {/* Voice Status Listening Banner */}
       {voiceActive && (
-        <div className="flex items-center justify-between border-t border-[#bbf246]/30 bg-[#bbf246]/10 backdrop-blur-md px-4 py-2.5 text-xs text-slate-200">
+        <div className="flex items-center justify-between border-t border-[#00CEC8]/30 bg-[#00CEC8]/10 backdrop-blur-md px-4 py-2.5 text-xs text-slate-200">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#bbf246] opacity-75"></span>
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#bbf246]"></span>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#EB4203] opacity-75"></span>
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#EB4203]"></span>
             </span>
             <span className="font-semibold text-white">NOVA is listening (English / Hindi):</span>
-            <span className="italic text-[#bbf246]">{lastHeard ? `“${lastHeard}”` : "Speak to NOVA in English or Hindi..."}</span>
+            <span className="italic text-[#00CEC8]">{lastHeard ? `“${lastHeard}”` : "Speak to NOVA in English or Hindi..."}</span>
           </div>
           <button
             onClick={stopVoice}
@@ -997,7 +985,7 @@ export default function AIConsole({ token }: Props) {
               className={`grid h-10 w-10 place-items-center rounded-xl transition-all ${
                 voiceActive
                   ? "bg-rose-600 text-white shadow-lg shadow-rose-600/30 animate-pulse"
-                  : "glass-subcard text-slate-300 hover:text-[#bbf246]"
+                  : "glass-subcard text-slate-300 hover:text-[#00CEC8]"
               }`}
               title={voiceActive ? "Stop microphone" : "Speak to NOVA in English or Hindi"}
             >
@@ -1007,7 +995,7 @@ export default function AIConsole({ token }: Props) {
             <button
               type="submit"
               disabled={loading || !inputPrompt.trim()}
-              className="grid h-10 w-10 place-items-center rounded-xl bg-[#bbf246] hover:bg-[#a8e030] text-[#0c1803] font-bold shadow-lg shadow-[#bbf246]/25 transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+              className="grid h-10 w-10 place-items-center rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] text-[#032023] font-bold shadow-lg shadow-[#00CEC8]/25 transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
               title="Send message to NOVA (Enter)"
             >
               {loading ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={18} />}
@@ -1017,8 +1005,8 @@ export default function AIConsole({ token }: Props) {
 
         {/* Live Audio Engine Status & Online Music Finder */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/10">
-          <div className="flex items-center gap-1.5 text-xs text-[#bbf246] font-medium">
-            <Waves size={13} className="text-[#bbf246] animate-pulse" />
+          <div className="flex items-center gap-1.5 text-xs text-[#00CEC8] font-medium">
+            <Waves size={13} className="text-[#00CEC8] animate-pulse" />
             <span>{novaVoiceStatus}</span>
           </div>
 
@@ -1032,7 +1020,7 @@ export default function AIConsole({ token }: Props) {
             <button
               type="submit"
               disabled={searchLoading}
-              className="rounded-lg bg-[#bbf246] hover:bg-[#a8e030] px-3 py-1 text-xs font-bold text-[#0c1803] transition"
+              className="rounded-lg bg-[#00CEC8] hover:bg-[#00b5af] px-3 py-1 text-xs font-bold text-[#032023] transition"
             >
               {searchLoading ? <LoaderCircle size={12} className="animate-spin" /> : <Search size={12} />}
               <span>Find</span>
@@ -1052,14 +1040,14 @@ export default function AIConsole({ token }: Props) {
             {results.map((item) => (
               <div
                 key={item.id}
-                className="glass-subcard flex items-center justify-between p-2 text-xs hover:border-[#bbf246]/40 transition"
+                className="glass-subcard flex items-center justify-between p-2 text-xs hover:border-[#00CEC8]/40 transition"
               >
                 <div>
                   <b className="text-white">{item.title}</b> <span className="text-slate-400">— {item.artist}</span>
                 </div>
                 <button
                   onClick={() => void openYouTube(`${item.title} ${item.artist}`)}
-                  className="badge-lime text-[11px] py-1 px-2.5 cursor-pointer"
+                  className="badge-coral text-[11px] py-1 px-2.5 cursor-pointer"
                 >
                   <Radio size={11} /> Play YouTube
                 </button>

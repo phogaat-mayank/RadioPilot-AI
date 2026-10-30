@@ -14,8 +14,5 @@ async def bootstrap_station() -> None:
         await repository.get_state()
         if not await repository.find_user(settings.admin_email):
             await repository.add_user(User(email=settings.admin_email.lower(), password_hash=hash_password(settings.admin_password), role=UserRole.ADMIN))
-        from datetime import datetime, timezone
         from scheduler.service import station_scheduler
-        for schedule in await repository.list_schedules():
-            if schedule.enabled and schedule.event_type == "playlist" and schedule.playlist_id and schedule.run_at > datetime.now(timezone.utc):
-                station_scheduler.register_playlist(schedule.id, schedule.playlist_id, schedule.run_at)
+        await station_scheduler.sync_database_schedules()
