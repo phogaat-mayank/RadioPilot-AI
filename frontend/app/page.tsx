@@ -97,6 +97,9 @@ export default function Home() {
   const [navSection, setNavSection] = useState<"dashboard" | "library" | "playlists" | "scheduler" | "ai">("dashboard");
   const [operationsTab, setOperationsTab] = useState<"library" | "playlists" | "scheduler" | "logs">("library");
   const [lastVolume, setLastVolume] = useState<number>(75);
+  const [localVolume, setLocalVolume] = useState<number>(75);
+  const isChangingVolumeRef = useRef<boolean>(false);
+  const volumeDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const handleNav = (target: "dashboard" | "library" | "playlists" | "scheduler" | "ai") => {
@@ -179,14 +182,24 @@ export default function Home() {
     };
   }, [token, station?.current_song?.id, station?.playback_revision]);
 
+  // Sync volume from station status when user is not actively dragging slider
+  useEffect(() => {
+    if (station?.volume !== undefined && !isChangingVolumeRef.current) {
+      setLocalVolume(station.volume);
+    }
+  }, [station?.volume]);
+
   useEffect(() => {
     const player = audioRef.current;
     if (!player || !audioUrl) return;
-    player.volume = Math.max(0, Math.min(1, (station?.volume ?? 75) / 100));
+    if (!isChangingVolumeRef.current) {
+      player.volume = Math.max(0, Math.min(1, localVolume / 100));
+      player.muted = localVolume === 0;
+    }
     if (station?.status === "playing")
       void player.play().catch(() => setError("Click the audio player once to allow sound in this browser."));
     if (station?.status === "paused" || station?.status === "stopped") player.pause();
-  }, [audioUrl, station?.status, station?.volume]);
+  }, [audioUrl, station?.status]);
 
   const title = useMemo(
     () => (station?.current_song ? `${station.current_song.title} — ${station.current_song.artist}` : "No track on air"),
@@ -226,22 +239,82 @@ export default function Home() {
     }
   };
 
-  const setVolume = (value: number) => {
+  const handleVolumeChange = (value: number) => {
+    isChangingVolumeRef.current = true;
+    setLocalVolume(value);
     if (value > 0) setLastVolume(value);
+
+    // Instant zero-latency hardware volume adjustment
     if (audioRef.current) {
       audioRef.current.volume = value / 100;
       audioRef.current.muted = value === 0;
     }
-    void invoke("/station/volume", { method: "PUT", body: JSON.stringify({ volume: value }) });
+
+    // Debounce backend sync so continuous dragging doesn't freeze the UI with HTTP requests
+    if (volumeDebounceTimerRef.current) {
+      clearTimeout(volumeDebounceTimerRef.current);
+    }
+    volumeDebounceTimerRef.current = setTimeout(() => {
+      isChangingVolumeRef.current = false;
+      if (token) {
+        void request("/station/volume", token, {
+          method: "PUT",
+          body: JSON.stringify({ volume: value }),
+        })
+          .then(() => {
+            setStation((prev) => (prev ? { ...prev, volume: value } : null));
+          })
+          .catch(() => undefined);
+      }
+    }, 120);
+  };
+
+  const handleVolumeCommit = () => {
+    if (volumeDebounceTimerRef.current) {
+      clearTimeout(volumeDebounceTimerRef.current);
+      volumeDebounceTimerRef.current = null;
+    }
+    isChangingVolumeRef.current = false;
+    if (token) {
+      void request("/station/volume", token, {
+        method: "PUT",
+        body: JSON.stringify({ volume: localVolume }),
+      })
+        .then(() => {
+          setStation((prev) => (prev ? { ...prev, volume: localVolume } : null));
+        })
+        .catch(() => undefined);
+    }
   };
 
   const toggleMute = () => {
-    const current = station?.volume ?? 75;
+    const current = localVolume;
+    let target = 0;
     if (current > 0) {
       setLastVolume(current);
-      setVolume(0);
+      target = 0;
     } else {
-      setVolume(lastVolume > 0 ? lastVolume : 75);
+      target = lastVolume > 0 ? lastVolume : 75;
+    }
+    setLocalVolume(target);
+    if (audioRef.current) {
+      audioRef.current.volume = target / 100;
+      audioRef.current.muted = target === 0;
+    }
+    if (volumeDebounceTimerRef.current) {
+      clearTimeout(volumeDebounceTimerRef.current);
+      volumeDebounceTimerRef.current = null;
+    }
+    isChangingVolumeRef.current = false;
+    if (token) {
+      void request("/station/volume", token, {
+        method: "PUT",
+        body: JSON.stringify({ volume: target }),
+      })
+        .then(() => {
+          setStation((prev) => (prev ? { ...prev, volume: target } : null));
+        })
+        .catch(() => undefined);
     }
   };
 
@@ -458,7 +531,7 @@ export default function Home() {
                 <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#FCEFC3] text-[#211802] font-bold shadow-md shadow-[#FCEFC3]/25">
                   <Radio size={18} />
                 </div>
-                <span className="mt-2 text-xl font-extrabold text-white">{station?.volume ?? 75}%</span>
+                <span className="mt-2 text-xl font-extrabold text-white">{localVolume}%</span>
                 <span className="text-[11px] text-slate-400">Master Level</span>
               </div>
             </div>
@@ -520,12 +593,12 @@ export default function Home() {
                   type="button"
                   onClick={toggleMute}
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:text-white hover:border-white/20 hover:bg-white/10 transition cursor-pointer backdrop-blur-md shadow-sm active:scale-95"
-                  title={(station?.volume ?? 75) === 0 ? "Unmute audio (Click to restore)" : "Mute audio (Click to mute)"}
-                  aria-label={(station?.volume ?? 75) === 0 ? "Unmute audio" : "Mute audio"}
+                  title={localVolume === 0 ? "Unmute audio (Click to restore)" : "Mute audio (Click to mute)"}
+                  aria-label={localVolume === 0 ? "Unmute audio" : "Mute audio"}
                 >
-                  {(station?.volume ?? 75) === 0 ? (
+                  {localVolume === 0 ? (
                     <VolumeX size={19} className="text-[#EB4203] animate-in zoom-in-75 duration-150" />
-                  ) : (station?.volume ?? 75) < 40 ? (
+                  ) : localVolume < 40 ? (
                     <Volume1 size={19} className="text-slate-300 hover:text-[#00CEC8] transition" />
                   ) : (
                     <Volume2 size={19} className="text-slate-300 hover:text-[#00CEC8] transition" />
@@ -533,15 +606,19 @@ export default function Home() {
                 </button>
                 <input
                   aria-label="Volume"
-                  value={station?.volume ?? 75}
+                  value={localVolume}
                   type="range"
                   min="0"
                   max="100"
-                  className="w-full accent-[#00CEC8] cursor-pointer"
-                  onChange={(e) => setVolume(Number(e.target.value))}
+                  className="w-full accent-[#00CEC8] cursor-pointer touch-none"
+                  onInput={(e) => handleVolumeChange(Number(e.currentTarget.value))}
+                  onChange={(e) => handleVolumeChange(Number(e.currentTarget.value))}
+                  onPointerUp={handleVolumeCommit}
+                  onMouseUp={handleVolumeCommit}
+                  onTouchEnd={handleVolumeCommit}
                 />
                 <span className="font-mono text-sm text-slate-300 w-8 text-right shrink-0">
-                  {station?.volume ?? 75}
+                  {localVolume}
                 </span>
               </div>
             </div>

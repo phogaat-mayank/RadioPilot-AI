@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
   MoreVertical,
@@ -47,19 +47,42 @@ export default function GlassAudioPlayer({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(currentSong?.duration_seconds || 0);
   const [isSeeking, setIsSeeking] = useState<boolean>(false);
+  const isDraggingRef = useRef<boolean>(false);
   const [showMenu, setShowMenu] = useState<boolean>(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1);
   const [isLooping, setIsLooping] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const progressContainerRef = useRef<HTMLDivElement>(null);
 
-  // Synchronize audio events
+  // High-framerate fluid progress tracker during active playback (~30-60fps)
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !isPlaying) return;
+
+    let animId: number;
+    let lastStamp = 0;
+
+    const renderTick = (timestamp: number) => {
+      if (timestamp - lastStamp >= 30) {
+        if (!isDraggingRef.current && audio && !audio.paused && !audio.ended) {
+          setCurrentTime(audio.currentTime);
+        }
+        lastStamp = timestamp;
+      }
+      animId = requestAnimationFrame(renderTick);
+    };
+
+    animId = requestAnimationFrame(renderTick);
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying, audioRef]);
+
+  // Synchronize native audio events
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const handleTimeUpdate = () => {
-      if (!isSeeking) {
+      if (!isDraggingRef.current && !isPlaying) {
         setCurrentTime(audio.currentTime);
       }
     };
@@ -90,7 +113,7 @@ export default function GlassAudioPlayer({
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("ended", handleEndedInternal);
     };
-  }, [audioRef, isSeeking, isLooping, onEnded, currentSong]);
+  }, [audioRef, isPlaying, isLooping, onEnded, currentSong]);
 
   // Update duration if song changes
   useEffect(() => {
@@ -113,15 +136,62 @@ export default function GlassAudioPlayer({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showMenu]);
 
-  // Handle seeking / clicking timeline
-  const handleSeek = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!progressContainerRef.current || !audioRef.current) return;
+  // Helper to calculate exact time from pointer coordinate
+  const calcTimeFromPointer = (clientX: number): number => {
+    if (!progressContainerRef.current) return 0;
     const rect = progressContainerRef.current.getBoundingClientRect();
-    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const targetDuration = duration > 0 ? duration : 180;
-    const newTime = pos * targetDuration;
-    audioRef.current.currentTime = newTime;
+    if (rect.width <= 0) return 0;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const targetDuration = duration > 0 ? duration : (currentSong?.duration_seconds || 180);
+    return ratio * targetDuration;
+  };
+
+  // Immediate 0-latency pointer event handlers for smooth scrubbing
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isDraggingRef.current = true;
+    setIsSeeking(true);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+
+    const newTime = calcTimeFromPointer(e.clientX);
     setCurrentTime(newTime);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    e.preventDefault();
+    const newTime = calcTimeFromPointer(e.clientX);
+    setCurrentTime(newTime);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    const finalTime = calcTimeFromPointer(e.clientX);
+    setCurrentTime(finalTime);
+    if (audioRef.current) {
+      audioRef.current.currentTime = finalTime;
+    }
+    // Briefly hold seek lock so audio decoder catches up without jitter
+    setTimeout(() => {
+      isDraggingRef.current = false;
+      setIsSeeking(false);
+    }, 60);
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    isDraggingRef.current = false;
+    setIsSeeking(false);
   };
 
   const handleRateChange = (rate: number) => {
@@ -191,18 +261,27 @@ export default function GlassAudioPlayer({
           <span className="text-slate-400">{formatTime(duration)}</span>
         </div>
 
-        {/* Interactive Scrubbing Timeline Track */}
+        {/* Interactive Scrubbing Timeline Track with Fluid Pointer Drag */}
         <div
           ref={progressContainerRef}
-          onClick={handleSeek}
-          className="group/track relative flex-1 h-7 flex items-center cursor-pointer select-none"
-          title="Click to seek position"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          className={`group/track relative flex-1 h-8 flex items-center select-none touch-none ${
+            isSeeking ? "cursor-grabbing" : "cursor-pointer"
+          }`}
+          title="Drag or click to seek position"
         >
           {/* Glass Rail Background */}
-          <div className="relative h-1.5 w-full rounded-full bg-white/12 overflow-hidden transition-all duration-150 group-hover/track:h-2">
-            {/* Filled Caribbean Turquoise Progress Line */}
+          <div
+            className={`relative w-full rounded-full bg-white/15 overflow-hidden transition-[height] duration-150 ${
+              isSeeking ? "h-2" : "h-1.5 group-hover/track:h-2"
+            }`}
+          >
+            {/* Filled Caribbean Turquoise Progress Line (Instant zero-latency positioning) */}
             <div
-              className="h-full rounded-full transition-all duration-75"
+              className="h-full rounded-full"
               style={{
                 width: `${progressPercent}%`,
                 background: "linear-gradient(90deg, #00CEC8 0%, #00CEC8 100%)",
@@ -213,7 +292,11 @@ export default function GlassAudioPlayer({
 
           {/* Glowing Scrubber Thumb Knob */}
           <div
-            className="absolute h-3 w-3 -translate-x-1/2 rounded-full bg-white shadow-[0_0_10px_#00CEC8] transition-all opacity-0 group-hover/track:opacity-100 group-hover/track:scale-110 pointer-events-none"
+            className={`absolute h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-white shadow-[0_0_12px_#00CEC8] pointer-events-none transition-transform duration-75 ${
+              isSeeking
+                ? "opacity-100 scale-125 shadow-[0_0_16px_#00CEC8]"
+                : "opacity-0 group-hover/track:opacity-100 group-hover/track:scale-110"
+            }`}
             style={{
               left: `${progressPercent}%`,
             }}
