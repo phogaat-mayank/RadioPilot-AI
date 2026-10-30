@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import AIConsole from "../components/AIConsole";
+import GlassAudioPlayer from "../components/GlassAudioPlayer";
 import OperationsWorkspace from "../components/OperationsWorkspace";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -463,18 +464,33 @@ export default function Home() {
             </div>
 
             {audioUrl && (
-              <audio
-                ref={audioRef}
-                src={audioUrl}
-                controls
-                className="mt-5 w-full opacity-90"
-                onEnded={() =>
-                  void invoke("/station/track-ended", {
-                    method: "POST",
-                    body: JSON.stringify({ playback_revision: station?.playback_revision }),
-                  })
-                }
-              />
+              <div className="mt-5">
+                <GlassAudioPlayer
+                  audioRef={audioRef}
+                  audioUrl={audioUrl}
+                  isPlaying={station?.status === "playing"}
+                  volume={station?.volume ?? 75}
+                  onTogglePlay={() =>
+                    void invoke(
+                      station?.status === "playing"
+                        ? "/station/pause"
+                        : station?.status === "paused"
+                        ? "/station/resume"
+                        : "/station/play",
+                      { method: "POST" }
+                    )
+                  }
+                  onVolumeChange={setVolume}
+                  onToggleMute={toggleMute}
+                  onEnded={() =>
+                    void invoke("/station/track-ended", {
+                      method: "POST",
+                      body: JSON.stringify({ playback_revision: station?.playback_revision }),
+                    })
+                  }
+                  currentSong={station?.current_song}
+                />
+              </div>
             )}
 
             {/* Playback Controls (Crisp white circle button matching reference image white bar) */}

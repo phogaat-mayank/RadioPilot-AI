@@ -377,3 +377,42 @@ button:active {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.28);
 }
+
+/* Glassmorphism for native HTML5 audio elements across all browsers */
+audio {
+  color-scheme: dark !important;
+  border-radius: 9999px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 42%, rgba(18, 23, 34, 0.48) 100%), rgba(20, 25, 36, 0.58) !important;
+  backdrop-filter: blur(28px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35),
+    0 16px 36px -8px rgba(0, 0, 0, 0.65) !important;
+}
+
+audio::-webkit-media-controls-panel {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.02) 42%, rgba(18, 23, 34, 0.45) 100%), rgba(20, 25, 36, 0.55) !important;
+  color: #f1f5f9 !important;
+}
+
+audio::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-time-remaining-display {
+  color: #f1f5f9 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 12px !important;
+}
+
+audio::-webkit-media-controls-timeline {
+  accent-color: #00CEC8 !important;
+}
+
+audio::-webkit-media-controls-volume-slider {
+  accent-color: #00CEC8 !important;
+}
+
+audio::-webkit-media-controls-play-button,
+audio::-webkit-media-controls-mute-button {
+  filter: invert(1) brightness(1.2);
+}
