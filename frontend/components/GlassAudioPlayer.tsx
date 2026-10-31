@@ -317,15 +317,16 @@ export default function GlassAudioPlayer({
             <MoreVertical size={16} />
           </button>
 
-          {/* Liquid Frosted Glass Options Popover */}
+          {/* Liquid Frosted Glass Options Popover (Faithful to Sample Images & Video) */}
           {showMenu && (
             <div
-              className="absolute right-0 bottom-full mb-2 z-50 w-44 rounded-2xl p-1.5 space-y-1 liquid-dropdown-menu text-xs"
+              className="absolute right-0 bottom-full mb-2.5 z-50 w-48 rounded-[26px] p-2 space-y-1.5 liquid-dropdown-menu text-xs"
             >
               <button
                 type="button"
                 onClick={restartSong}
-                className="liquid-dropdown-item flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-200 hover:text-white cursor-pointer"
+                className="liquid-dropdown-item flex w-full items-center gap-2.5 rounded-full px-3.5 py-2 text-left text-slate-200 hover:text-white hover:liquid-glass-pill-hover cursor-pointer"
+                style={{ animationDelay: "0ms" }}
               >
                 <RotateCcw size={14} className="text-white" />
                 <span>Restart song</span>
@@ -334,11 +335,12 @@ export default function GlassAudioPlayer({
               <button
                 type="button"
                 onClick={toggleLoop}
-                className={`liquid-dropdown-item flex w-full items-center justify-between rounded-xl px-3 py-2 text-left cursor-pointer ${
+                className={`liquid-dropdown-item flex w-full items-center justify-between rounded-full px-3.5 py-2 text-left cursor-pointer ${
                   isLooping
-                    ? "bg-white/18 text-white font-semibold border border-white/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.30)]"
-                    : "text-slate-200 hover:text-white"
+                    ? "liquid-glass-pill-active"
+                    : "text-slate-200 hover:text-white hover:liquid-glass-pill-hover"
                 }`}
+                style={{ animationDelay: "28ms" }}
               >
                 <div className="flex items-center gap-2">
                   <Repeat size={14} className={isLooping ? "text-white" : "text-slate-400"} />
@@ -347,22 +349,23 @@ export default function GlassAudioPlayer({
                 {isLooping && <Check size={13} className="text-white" />}
               </button>
 
-              <div className="my-1 border-t border-white/10" />
+              <div className="my-1 border-t border-white/14" />
 
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <div className="px-3.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Playback Speed
               </div>
 
-              {[0.75, 1, 1.25, 1.5].map((rate) => (
+              {[0.75, 1, 1.25, 1.5].map((rate, idx) => (
                 <button
                   key={rate}
                   type="button"
                   onClick={() => handleRateChange(rate)}
-                  className={`liquid-dropdown-item flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left cursor-pointer ${
+                  className={`liquid-dropdown-item flex w-full items-center justify-between rounded-full px-3.5 py-1.5 text-left cursor-pointer ${
                     playbackRate === rate
-                      ? "bg-white/18 text-white font-bold border border-white/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.30)]"
-                      : "text-slate-300 hover:text-white"
+                      ? "liquid-glass-pill-active font-bold"
+                      : "text-slate-300 hover:text-white hover:liquid-glass-pill-hover"
                   }`}
+                  style={{ animationDelay: `${(idx + 2) * 28}ms` }}
                 >
                   <span>{rate === 1 ? "Normal (1x)" : `${rate}x`}</span>
                   {playbackRate === rate && <Check size={12} className="text-white" />}

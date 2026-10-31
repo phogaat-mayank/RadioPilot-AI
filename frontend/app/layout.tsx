@@ -24,16 +24,17 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
             }}
           />
 
-          {/* Volumetric Neon Ambient Glow & 3D Depth Lighting (Harmonized with 4-Color Palette: #00CEC8, #EB4203, #FF9C5F, #FCEFC3) */}
+          {/* Volumetric Neon Ambient Glow & 3D Depth Lighting (Harmonized with Sample Images & Video: Emerald, Azure, Coral & Pearl) */}
           <div
             className="absolute inset-0"
             style={{
               background: `
-                radial-gradient(circle at 26% 36%, rgba(235, 66, 3, 0.28) 0%, transparent 45%),
-                radial-gradient(circle at 38% 42%, rgba(255, 156, 95, 0.18) 0%, transparent 42%),
-                radial-gradient(circle at 18% 12%, rgba(0, 206, 200, 0.12) 0%, transparent 35%),
-                radial-gradient(circle at 86% 82%, rgba(252, 239, 195, 0.10) 0%, transparent 45%),
-                radial-gradient(ellipse 90% 90% at 50% 50%, rgba(7, 9, 13, 0.10) 0%, rgba(5, 7, 10, 0.72) 100%)
+                radial-gradient(circle at 26% 36%, rgba(235, 66, 3, 0.26) 0%, transparent 45%),
+                radial-gradient(circle at 38% 42%, rgba(255, 156, 95, 0.22) 0%, transparent 42%),
+                radial-gradient(circle at 18% 12%, rgba(0, 206, 200, 0.22) 0%, transparent 38%),
+                radial-gradient(circle at 86% 82%, rgba(252, 239, 195, 0.16) 0%, transparent 45%),
+                radial-gradient(circle at 72% 70%, rgba(16, 185, 129, 0.15) 0%, transparent 40%),
+                radial-gradient(ellipse 90% 90% at 50% 50%, rgba(7, 9, 13, 0.08) 0%, rgba(5, 7, 10, 0.70) 100%)
               `,
             }}
           />
