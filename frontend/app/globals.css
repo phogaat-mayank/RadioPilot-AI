@@ -237,27 +237,43 @@ body {
   gap: .35rem;
 }
 
-/* Glass Inputs & Select Dropdowns */
+/* Glass Inputs & Form Fields - Liquid Glass Capsule Design (Matches Samples) */
 .glass-input {
   color-scheme: dark !important;
-  background-color: #0f131c !important;
-  background: linear-gradient(180deg, rgba(16, 20, 28, 0.65) 0%, rgba(20, 25, 36, 0.85) 100%) !important;
-  backdrop-filter: blur(22px) saturate(190%);
-  -webkit-backdrop-filter: blur(22px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.03) 45%,
+    rgba(16, 20, 30, 0.24) 100%
+  ), rgba(16, 20, 30, 0.32) !important;
+  backdrop-filter: blur(24px) saturate(210%);
+  -webkit-backdrop-filter: blur(24px) saturate(210%);
+  border: 1.5px solid rgba(255, 255, 255, 0.24) !important;
   color: #f8fafc !important;
-  border-radius: 14px;
+  border-radius: 9999px;
   box-shadow:
-    inset 0 1.5px 2px 0 rgba(0, 0, 0, 0.45),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.04);
-  transition: all .2s ease;
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.50),
+    inset 0 -1px 1.5px rgba(0, 0, 0, 0.30),
+    0 10px 24px -4px rgba(0, 0, 0, 0.50) !important;
+  transition: all .24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.glass-input:hover {
+  border-color: rgba(255, 255, 255, 0.38) !important;
+  box-shadow:
+    inset 0 2px 2.5px rgba(255, 255, 255, 0.65),
+    inset 0 -1px 1.5px rgba(0, 0, 0, 0.30),
+    0 14px 30px -4px rgba(0, 0, 0, 0.65) !important;
 }
 .glass-input:focus {
-  border-color: rgba(0, 206, 200, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
   box-shadow:
-    0 0 0 2px rgba(0, 206, 200, 0.24),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.1) !important;
+    0 0 0 2px rgba(255, 255, 255, 0.25),
+    inset 0 2px 2.5px rgba(255, 255, 255, 0.75),
+    0 14px 36px -6px rgba(0, 0, 0, 0.75) !important;
   outline: none;
+}
+textarea.glass-input {
+  border-radius: 22px !important;
 }
 
 /* Cross-Browser Dropdown Styling for Native <select> and <option> */

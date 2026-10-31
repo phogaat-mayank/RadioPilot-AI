@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { CalendarClock, FolderOpen, ListPlus, Music2, Trash2, Upload, X } from "lucide-react";
 import GlassSelect from "./GlassSelect";
+import GlassDateTimePicker from "./GlassDateTimePicker";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 type Song = { id: number; title: string; artist: string };
@@ -268,7 +269,12 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
     {tab === "playlists" && <div className="mt-5 space-y-4">
       <div className="flex items-center gap-2"><Music2 size={18} className="text-[#FF9C5F]"/><h2 className="font-bold text-white">Playlists</h2></div>
       <form onSubmit={createPlaylist} className="flex gap-2">
-        <input value={playlistName} onChange={e => setPlaylistName(e.target.value)} placeholder="Playlist name" className="glass-input min-w-0 flex-1 p-2.5 text-sm text-white focus:outline-none"/>
+        <input
+          value={playlistName}
+          onChange={(e) => setPlaylistName(e.target.value)}
+          placeholder="Playlist name"
+          className="glass-input min-w-0 flex-1 px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none liquid-shimmer"
+        />
         <button className="rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] px-4 text-sm font-bold text-[#032023] shadow-md shadow-[#00CEC8]/25 transition">Create</button>
       </form>
       <div className="space-y-2">
@@ -330,8 +336,17 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
             { value: "news", label: "1-minute news bulletin" },
           ]}
         />
-        <input value={scheduleName} onChange={e => setScheduleName(e.target.value)} placeholder={scheduleType === "news" ? "News bulletin name" : "Show or event name"} className="glass-input w-full p-2.5 text-sm text-slate-200 focus:outline-none"/>
-        <input value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} type="datetime-local" className="glass-input w-full p-2.5 text-sm text-slate-200 focus:outline-none"/>
+        <input
+          value={scheduleName}
+          onChange={(e) => setScheduleName(e.target.value)}
+          placeholder={scheduleType === "news" ? "News bulletin name" : "Show or event name"}
+          className="glass-input w-full px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none liquid-shimmer"
+        />
+        <GlassDateTimePicker
+          value={scheduleTime}
+          onChange={(val) => setScheduleTime(val)}
+          placeholder="Choose airtime and date"
+        />
         {scheduleType === "playlist" ? (
           <GlassSelect
             value={selectedPlaylist}
