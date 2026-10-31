@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ListMusic,
   LogOut,
+  Mic,
   Music2,
   Pause,
   Play,
@@ -19,11 +20,20 @@ import {
   X,
 } from "lucide-react";
 import AIConsole from "../components/AIConsole";
+import AIDJVoiceSettings from "../components/AIDJVoiceSettings";
 import GlassAudioPlayer from "../components/GlassAudioPlayer";
 import OperationsWorkspace from "../components/OperationsWorkspace";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 type Song = { id: number; title: string; artist: string; duration_seconds: number; file_path: string };
+type Announcement = {
+  id: string;
+  text: string;
+  voice_id: string;
+  language: string;
+  duration_seconds?: number | null;
+  kind?: string | null;
+};
 type Station = {
   status: string;
   mode: "MANUAL" | "AUTOPILOT";
@@ -32,6 +42,8 @@ type Station = {
   current_position_seconds: number;
   playback_revision: number;
   queue: Song[];
+  active_announcement?: Announcement | null;
+  pending_announcement?: Announcement | null;
 };
 
 function formatDuration(seconds: number): string {
@@ -94,7 +106,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [navSection, setNavSection] = useState<"dashboard" | "library" | "playlists" | "scheduler" | "ai">("dashboard");
+  const [navSection, setNavSection] = useState<"dashboard" | "library" | "playlists" | "scheduler" | "ai" | "dj">("dashboard");
   const [operationsTab, setOperationsTab] = useState<"library" | "playlists" | "scheduler" | "logs">("library");
   const [lastVolume, setLastVolume] = useState<number>(75);
   const [localVolume, setLocalVolume] = useState<number>(75);
@@ -102,7 +114,7 @@ export default function Home() {
   const volumeDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const handleNav = (target: "dashboard" | "library" | "playlists" | "scheduler" | "ai") => {
+  const handleNav = (target: "dashboard" | "library" | "playlists" | "scheduler" | "ai" | "dj") => {
     setNavSection(target);
     if (target === "dashboard") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -112,6 +124,9 @@ export default function Home() {
       el?.scrollIntoView({ behavior: "smooth", block: "start" });
     } else if (target === "ai") {
       const el = document.getElementById("ai-console-section");
+      el?.scrollIntoView({ behavior: "smooth" });
+    } else if (target === "dj") {
+      const el = document.getElementById("ai-dj-section");
       el?.scrollIntoView({ behavior: "smooth" });
     }
   };
@@ -155,13 +170,18 @@ export default function Home() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !station?.current_song) {
+    if (!token || (!station?.current_song && !station?.active_announcement)) {
       setAudioUrl(null);
       return;
     }
     const controller = new AbortController();
     let objectUrl = "";
-    void fetch(`${API}/library/songs/${station.current_song.id}/stream`, {
+
+    const streamEndpoint = station.active_announcement
+      ? `${API}/tts/stream/${station.active_announcement.id}`
+      : `${API}/library/songs/${station.current_song!.id}/stream`;
+
+    void fetch(streamEndpoint, {
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
     })
@@ -180,7 +200,7 @@ export default function Home() {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [token, station?.current_song?.id, station?.playback_revision]);
+  }, [token, station?.current_song?.id, station?.active_announcement?.id, station?.playback_revision]);
 
   // Sync volume from station status when user is not actively dragging slider
   useEffect(() => {
@@ -201,10 +221,22 @@ export default function Home() {
     if (station?.status === "paused" || station?.status === "stopped") player.pause();
   }, [audioUrl, station?.status]);
 
-  const title = useMemo(
-    () => (station?.current_song ? `${station.current_song.title} — ${station.current_song.artist}` : "No track on air"),
-    [station]
-  );
+  const title = useMemo(() => {
+    if (station?.active_announcement) {
+      const v = station.active_announcement.voice_id;
+      const rjName = v.includes("priyamvada")
+        ? "RJ Priyamvada"
+        : v.includes("pratham")
+        ? "RJ Pratham"
+        : v.includes("lessac")
+        ? "RJ Lessac"
+        : "RJ Ryan";
+      return `🎙️ ${rjName} — AI DJ Announcement (${station.active_announcement.language.toUpperCase()})`;
+    }
+    return station?.current_song
+      ? `${station.current_song.title} — ${station.current_song.artist}`
+      : "No track on air";
+  }, [station]);
 
   const filteredSongs = useMemo(() => {
     if (!quickFilter.trim()) return songs;
@@ -219,6 +251,23 @@ export default function Home() {
       await refresh();
     } catch (invokeError) {
       setError(invokeError instanceof Error ? invokeError.message : "Request failed");
+    }
+  };
+
+  const handleAudioEnded = () => {
+    if (station?.active_announcement) {
+      void invoke("/station/announcement-ended", {
+        method: "POST",
+        body: JSON.stringify({
+          announcement_id: station.active_announcement.id,
+          playback_revision: station.playback_revision,
+        }),
+      });
+    } else {
+      void invoke("/station/track-ended", {
+        method: "POST",
+        body: JSON.stringify({ playback_revision: station?.playback_revision }),
+      });
     }
   };
 
@@ -429,6 +478,13 @@ export default function Home() {
           >
             AI Studio
           </button>
+          <button
+            onClick={() => handleNav("dj")}
+            className={`glass-capsule-btn flex items-center gap-1.5 ${navSection === "dj" ? "glass-capsule-btn-active" : ""}`}
+          >
+            <Mic size={12} className={navSection === "dj" ? "text-white" : "text-[#00CEC8]"} />
+            <span>AI DJ</span>
+          </button>
         </nav>
 
         {/* Right: Operator Profile Capsule */}
@@ -536,6 +592,37 @@ export default function Home() {
               </div>
             </div>
 
+            {/* On-Air DJ Announcement Banner */}
+            {station?.active_announcement && (
+              <div className="mt-4 p-3.5 rounded-2xl border border-[#00CEC8]/40 bg-gradient-to-r from-[#00CEC8]/20 via-[#00CEC8]/10 to-transparent backdrop-blur-md flex items-center gap-3 animate-pulse shadow-lg shadow-[#00CEC8]/10">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#00CEC8] text-[#032023] font-bold shadow-md shadow-[#00CEC8]/30">
+                  <Mic size={20} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="badge-vermilion text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider">
+                      ● ON AIR DJ
+                    </span>
+                    <span className="text-xs font-bold text-white">
+                      {station.active_announcement.voice_id.includes("priyamvada")
+                        ? "RJ Priyamvada"
+                        : station.active_announcement.voice_id.includes("pratham")
+                        ? "RJ Pratham"
+                        : station.active_announcement.voice_id.includes("lessac")
+                        ? "RJ Lessac"
+                        : "RJ Ryan"}
+                    </span>
+                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 text-slate-300">
+                      {station.active_announcement.language}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-200 italic line-clamp-2">
+                    &ldquo;{station.active_announcement.text}&rdquo;
+                  </p>
+                </div>
+              </div>
+            )}
+
             {audioUrl && (
               <div className="mt-5">
                 <GlassAudioPlayer
@@ -552,13 +639,9 @@ export default function Home() {
                       { method: "POST" }
                     )
                   }
-                  onEnded={() =>
-                    void invoke("/station/track-ended", {
-                      method: "POST",
-                      body: JSON.stringify({ playback_revision: station?.playback_revision }),
-                    })
-                  }
+                  onEnded={handleAudioEnded}
                   currentSong={station?.current_song}
+                  activeAnnouncement={station?.active_announcement}
                 />
               </div>
             )}
@@ -664,6 +747,11 @@ export default function Home() {
               <p className="muted text-sm">Add a song from the library to begin.</p>
             )}
           </section>
+
+          {/* AI DJ VOICE ENGINE SETTINGS */}
+          <div id="ai-dj-section">
+            <AIDJVoiceSettings token={token} onAnnouncementTriggered={() => void refresh()} />
+          </div>
 
           {/* AI CONSOLE */}
           <div id="ai-console-section">

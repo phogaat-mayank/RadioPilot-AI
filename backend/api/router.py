@@ -1,7 +1,7 @@
 """Versioned API route aggregation."""
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from api.routes import ai, auth, library, playlists, schedules, station
+from api.routes import ai, auth, library, playlists, schedules, station, tts
 from database.session import SessionLocal
 from services.radio import RadioService
 from websocket.manager import manager
@@ -13,6 +13,7 @@ api_router.include_router(playlists.router)
 api_router.include_router(schedules.router)
 api_router.include_router(station.router)
 api_router.include_router(ai.router)
+api_router.include_router(tts.router)
 
 
 @api_router.websocket("/ws/state")

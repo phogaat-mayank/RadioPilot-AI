@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 
 from api.deps import SessionDep, UserDep
 from database.session import SessionLocal
-from schemas.radio import ModeChange, PlaybackState, QueueSong, TrackEnded, VolumeChange
+from schemas.radio import AnnouncementEnded, ModeChange, PlaybackState, QueueSong, TrackEnded, VolumeChange
 from services.radio import RadioService
 from websocket.manager import manager
 from workflows.autopilot import autopilot_graph
@@ -48,6 +48,13 @@ async def play(session: SessionDep, user: UserDep, song_id: int | None = Query(d
 async def track_ended(payload: TrackEnded, session: SessionDep, user: UserDep) -> PlaybackState:
     """Accept one browser completion event for the active playback revision."""
     return await RadioService(session).track_ended(payload.playback_revision, user.email)
+
+
+@router.post("/announcement-ended", response_model=PlaybackState)
+async def announcement_ended(payload: AnnouncementEnded | None = None, session: SessionDep = None, user: UserDep = None) -> PlaybackState:
+    """Accept browser completion event for an active AI DJ announcement."""
+    rev = payload.playback_revision if payload and payload.playback_revision else 1
+    return await RadioService(session).announcement_ended(rev, user.email)
 
 
 @router.post("/{command}", response_model=PlaybackState)

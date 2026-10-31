@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  Mic,
   MoreVertical,
   Pause,
   Play,
@@ -18,6 +19,13 @@ type Song = {
   file_path: string;
 };
 
+type ActiveAnnouncement = {
+  id: string;
+  text: string;
+  voice_id: string;
+  language: string;
+};
+
 type Props = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   audioUrl: string | null;
@@ -25,6 +33,7 @@ type Props = {
   onTogglePlay: () => void;
   onEnded: () => void;
   currentSong?: Song | null;
+  activeAnnouncement?: ActiveAnnouncement | null;
   className?: string;
 };
 
@@ -42,6 +51,7 @@ export default function GlassAudioPlayer({
   onTogglePlay,
   onEnded,
   currentSong,
+  activeAnnouncement,
   className = "",
 }: Props) {
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -115,13 +125,15 @@ export default function GlassAudioPlayer({
     };
   }, [audioRef, isPlaying, isLooping, onEnded, currentSong]);
 
-  // Update duration if song changes
+  // Update duration if song or announcement changes
   useEffect(() => {
-    if (currentSong?.duration_seconds) {
+    if (activeAnnouncement) {
+      setCurrentTime(0);
+    } else if (currentSong?.duration_seconds) {
       setDuration(currentSong.duration_seconds);
+      setCurrentTime(0);
     }
-    setCurrentTime(0);
-  }, [currentSong?.id, currentSong?.duration_seconds]);
+  }, [currentSong?.id, currentSong?.duration_seconds, activeAnnouncement?.id]);
 
   // Close menu on click outside
   useEffect(() => {
@@ -260,6 +272,13 @@ export default function GlassAudioPlayer({
           <span className="mx-1 text-slate-500">/</span>
           <span className="text-slate-400">{formatTime(duration)}</span>
         </div>
+
+        {activeAnnouncement && (
+          <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#EB4203]/20 border border-[#EB4203]/40 text-[#FF9C5F] text-[10px] font-bold animate-pulse shrink-0">
+            <Mic size={11} className="text-[#EB4203]" />
+            <span>AI DJ ON AIR</span>
+          </div>
+        )}
 
         {/* Interactive Scrubbing Timeline Track with Fluid Pointer Drag */}
         <div

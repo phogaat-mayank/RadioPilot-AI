@@ -116,13 +116,89 @@ class TrackEnded(BaseModel):
     playback_revision: int = Field(ge=1)
 
 
+class AnnouncementEnded(BaseModel):
+    """Browser completion payload when an AI DJ announcement finishes."""
+    announcement_id: str | None = None
+    playback_revision: int | None = None
+
+
+class AnnouncementOut(BaseModel):
+    """Spoken AI DJ announcement payload for the player."""
+    id: str
+    text: str
+    voice_id: str
+    duration_seconds: float
+    stream_url: str
+    announcement_type: str = "intro"
+
+
 class PlaybackState(BaseModel):
     """Real-time playback state safe for client display."""
     status: str
     mode: str
     volume: int
     current_song: Optional[SongOut] = None
+    active_announcement: Optional[AnnouncementOut] = None
     current_position_seconds: float
     playback_revision: int = 0
     queue: list[SongOut]
     updated_at: datetime
+
+
+class AIDJSettingsOut(BaseModel):
+    """AI DJ Voice Engine configuration."""
+    model_config = ConfigDict(from_attributes=True)
+    enabled: bool = True
+    voice_id: str = "hi_IN-priyamvada-medium"
+    language: str = "hi"
+    frequency: int = 1
+    volume: int = 100
+    intro_enabled: bool = True
+    outro_enabled: bool = False
+    greeting_enabled: bool = True
+
+
+class AIDJSettingsUpdate(BaseModel):
+    """Update payload for AI DJ Voice Engine configuration."""
+    enabled: Optional[bool] = None
+    voice_id: Optional[str] = None
+    language: Optional[str] = None
+    frequency: Optional[int] = Field(default=None, ge=1, le=10)
+    volume: Optional[int] = Field(default=None, ge=0, le=100)
+    intro_enabled: Optional[bool] = None
+    outro_enabled: Optional[bool] = None
+    greeting_enabled: Optional[bool] = None
+
+
+class TTSVoiceOut(BaseModel):
+    """Metadata for verified Piper neural voice models."""
+    id: str
+    name: str
+    language: str
+    language_code: str
+    gender: str
+    quality: str
+    sample_rate: int = 22050
+    downloaded: bool = True
+    license: str
+
+
+class TTSSynthesizeRequest(BaseModel):
+    """Synthesize arbitrary announcement text request."""
+    text: str = Field(min_length=1, max_length=2000)
+    voice_id: Optional[str] = None
+
+
+class ManualAnnouncementRequest(BaseModel):
+    """Manual announcement broadcast request."""
+    text: str = Field(min_length=1, max_length=2000)
+    voice_id: Optional[str] = None
+    language: Optional[str] = None
+    play_now: bool = False
+    play_immediately: Optional[bool] = None
+
+    @property
+    def should_play_now(self) -> bool:
+        if self.play_immediately is not None:
+            return self.play_immediately
+        return self.play_now

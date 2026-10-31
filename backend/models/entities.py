@@ -217,3 +217,19 @@ class AIDecision(Base):
     status: Mapped[str] = mapped_column(String(30), default="proposed", index=True)
     approved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AIDJSettings(Base):
+    """Singleton persistent AI DJ voice engine configuration."""
+
+    __tablename__ = "ai_dj_settings"
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    voice_id: Mapped[str] = mapped_column(String(100), default="hi_IN-priyamvada-medium")
+    language: Mapped[str] = mapped_column(String(10), default="hi")
+    frequency: Mapped[int] = mapped_column(Integer, default=1)
+    volume: Mapped[int] = mapped_column(Integer, default=100)
+    intro_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    outro_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    greeting_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

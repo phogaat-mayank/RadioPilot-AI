@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Protocol
 
 from models.entities import Song
+from schemas.radio import AnnouncementOut
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,7 @@ class PlaybackController:
         self._queue: deque[SongSnapshot] = deque()
         self._history: deque[SongSnapshot] = deque(maxlen=100)
         self._current: SongSnapshot | None = None
+        self._active_announcement: AnnouncementOut | None = None
         self._status = "stopped"
         self._position_seconds = 0.0
         self._started_at: datetime | None = None
@@ -264,6 +266,18 @@ class PlaybackController:
             self._engine.set_volume(volume)
             self._volume = volume
 
+    async def set_active_announcement(self, announcement: AnnouncementOut | None) -> None:
+        """Set or clear the on-air AI DJ announcement."""
+        async with self._lock:
+            self._active_announcement = announcement
+            self._playback_revision += 1
+
+    async def clear_active_announcement(self) -> None:
+        """Clear active announcement and increment revision."""
+        async with self._lock:
+            self._active_announcement = None
+            self._playback_revision += 1
+
     async def state(self) -> dict:
         """Return a snapshot suitable for serialization."""
         async with self._lock:
@@ -271,6 +285,7 @@ class PlaybackController:
                 "status": self._status,
                 "volume": self._volume,
                 "current_song": self._current,
+                "active_announcement": self._active_announcement,
                 "current_position_seconds": round(self._current_position_unlocked(), 1),
                 "playback_revision": self._playback_revision,
                 "queue": list(self._queue),
@@ -284,6 +299,7 @@ class PlaybackController:
         return self._position_seconds
 
     def _skip_unlocked(self) -> None:
+        self._active_announcement = None
         if self._current:
             self._history.append(self._current)
         if not self._queue:
