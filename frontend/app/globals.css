@@ -488,6 +488,173 @@ button:active {
   color: #ffffff;
 }
 
+/* ==========================================================================
+   Liquid Glass Popups, Notice Pills, AI Bubbles & Live Queue Transitions
+   ========================================================================== */
+
+/* Liquid Toast / Notice Pill Pop-up (Faithful to Image 1 from User) */
+@keyframes liquid-popup-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.90, 0.36) translateY(-18px);
+    border-radius: 9999px;
+    filter: blur(10px) brightness(1.30);
+  }
+  50% {
+    opacity: 0.98;
+    transform: scale(1.03, 1.04) translateY(3px);
+    border-radius: 9999px;
+    filter: blur(0px) brightness(1.10);
+  }
+  75% {
+    transform: scale(0.99, 0.985) translateY(-1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1, 1) translateY(0);
+    border-radius: 9999px;
+    filter: blur(0px) brightness(1);
+  }
+}
+
+.liquid-popup {
+  animation: liquid-popup-bloom 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: top center;
+  backdrop-filter: blur(28px) saturate(220%) brightness(108%);
+  -webkit-backdrop-filter: blur(28px) saturate(220%) brightness(108%);
+  border: 1.5px solid rgba(255, 255, 255, 0.36);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.05) 30%,
+    rgba(14, 20, 32, 0.28) 75%,
+    rgba(255, 255, 255, 0.12) 100%
+  ), rgba(16, 20, 30, 0.38);
+  box-shadow:
+    0 28px 65px -12px rgba(0, 0, 0, 0.85),
+    0 10px 24px -4px rgba(0, 0, 0, 0.50),
+    inset 0 2px 2.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 3px 0 rgba(0, 0, 0, 0.35),
+    inset 1.5px 0 2px 0 rgba(255, 255, 255, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-popup::before {
+  content: '';
+  position: absolute;
+  top: -60%;
+  left: -60%;
+  width: 220%;
+  height: 220%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.04) 60%,
+    transparent 100%
+  );
+  animation: liquid-caustic-sweep 0.80s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* AI Chat Message Bubble Pop-up Animation (Image 2 from User) */
+@keyframes liquid-chat-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.92, 0.45) translateY(-14px);
+    filter: blur(8px) brightness(1.25);
+  }
+  55% {
+    opacity: 0.98;
+    transform: scale(1.025, 1.035) translateY(2px);
+    filter: blur(0px) brightness(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1, 1) translateY(0);
+    filter: blur(0px) brightness(1);
+  }
+}
+
+.liquid-chat-bubble {
+  animation: liquid-chat-bloom 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: top left;
+  backdrop-filter: blur(28px) saturate(220%);
+  -webkit-backdrop-filter: blur(28px) saturate(220%);
+  border: 1.5px solid rgba(255, 255, 255, 0.28) !important;
+  box-shadow:
+    0 18px 45px -8px rgba(0, 0, 0, 0.65),
+    inset 0 2px 2px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.25) !important;
+}
+
+.liquid-chat-bubble-user {
+  animation: liquid-chat-bloom 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: top right;
+  backdrop-filter: blur(28px) saturate(220%);
+  -webkit-backdrop-filter: blur(28px) saturate(220%);
+  border: 1.5px solid rgba(255, 255, 255, 0.32) !important;
+  box-shadow:
+    0 18px 45px -8px rgba(0, 0, 0, 0.65),
+    inset 0 2px 2px 0 rgba(255, 255, 255, 0.70),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Now Playing Song Transition (Triggers when Track Advances/Switches) */
+@keyframes liquid-track-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.95, 0.70) translateY(-12px);
+    filter: blur(8px) brightness(1.30);
+  }
+  60% {
+    opacity: 0.98;
+    transform: scale(1.025, 1.02) translateY(2px);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1, 1) translateY(0);
+    filter: blur(0px) brightness(1);
+  }
+}
+
+.liquid-track-switch {
+  animation: liquid-track-bloom 0.44s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: top left;
+}
+
+/* Live Queue Song Transition Animation (Elastic Liquid Cascade on Track Switch) */
+@keyframes liquid-queue-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.94, 0.65) translateY(-12px);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 0.98;
+    transform: scale(1.018, 1.025) translateY(2px);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1, 1) translateY(0);
+    filter: blur(0px);
+  }
+}
+
+.liquid-queue-item {
+  animation: liquid-queue-bloom 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: top center;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease;
+}
+.liquid-queue-item:hover {
+  transform: translateX(4px) scale(1.01);
+}
+
 /* Liquid Wave Scrubber Progress (Fluid flowing Caribbean Turquoise gradient) */
 @keyframes liquid-wave {
   0% {

@@ -249,15 +249,15 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
   return <section className="panel p-6 relative z-20">
     <div className="glass-capsule-bar inline-flex items-center gap-1 p-1">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={`glass-capsule-btn ${tab === item.id ? "glass-capsule-btn-active" : ""}`}>{item.label}</button>)}</div>
     {notice && (
-      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[#FF9C5F]/30 bg-[#FF9C5F]/10 backdrop-blur-md px-4 py-2.5 text-xs text-[#FCEFC3]">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#FF9C5F] shrink-0" />
-          <span className="truncate">{notice}</span>
+      <div className="liquid-popup mt-3 flex items-center justify-between gap-3 rounded-full px-5 py-2.5 text-xs text-white shadow-lg">
+        <div className="flex items-center gap-2.5 min-w-0 z-10">
+          <span className="h-2 w-2 rounded-full bg-[#FF9C5F] shrink-0 shadow-sm shadow-[#FF9C5F]" />
+          <span className="truncate font-medium">{notice}</span>
         </div>
         <button
           type="button"
           onClick={() => setNotice("")}
-          className="text-[#FF9C5F]/80 hover:text-[#FCEFC3] transition shrink-0 p-0.5 rounded-lg hover:bg-[#FF9C5F]/15"
+          className="text-slate-300 hover:text-white transition shrink-0 p-1 rounded-full hover:bg-white/20 z-10 active:scale-90"
           title="Dismiss message"
         >
           <X size={14} />

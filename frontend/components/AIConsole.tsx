@@ -839,7 +839,7 @@ export default function AIConsole({ token }: Props) {
           return (
             <div
               key={msg.id}
-              className={`flex items-start gap-3 text-sm animate-in fade-in slide-in-from-bottom-1 duration-200 ${
+              className={`flex items-start gap-3 text-sm ${
                 isUser ? "flex-row-reverse" : "flex-row"
               }`}
             >
@@ -854,12 +854,12 @@ export default function AIConsole({ token }: Props) {
                 {isUser ? <User size={15} /> : <Bot size={15} />}
               </div>
 
-              {/* Message Bubble */}
+              {/* Message Bubble (Liquid Glass Droplet Bloom Animation matching Image 2) */}
               <div
                 className={`group relative max-w-[85%] rounded-2xl p-4 transition-all ${
                   isUser
-                    ? "bg-white/[0.09] text-white rounded-tr-none border border-white/20 backdrop-blur-xl shadow-lg [box-shadow:inset_0_1px_1px_rgba(255,255,255,0.25)]"
-                    : "glass-subcard text-slate-100 rounded-tl-none"
+                    ? "liquid-chat-bubble-user bg-white/[0.12] text-white rounded-tr-none border border-white/25 backdrop-blur-2xl shadow-xl"
+                    : "liquid-chat-bubble glass-subcard text-slate-100 rounded-tl-none border border-white/25"
                 }`}
               >
                 {/* Header info */}

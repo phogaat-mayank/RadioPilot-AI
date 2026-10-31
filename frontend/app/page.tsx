@@ -374,7 +374,7 @@ export default function Home() {
               type="password"
             />
           </label>
-          {error && <p className="text-xs text-rose-400">{error}</p>}
+          {error && <p className="liquid-popup rounded-2xl bg-rose-500/15 border border-rose-500/35 px-4 py-2.5 text-xs text-rose-300 font-medium shadow-md">{error}</p>}
           <button
             disabled={loading}
             className="w-full rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] py-3.5 text-sm font-bold text-[#032023] shadow-lg shadow-[#00CEC8]/30 transition"
@@ -494,8 +494,11 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Title Section */}
-            <div className="mt-8">
+            {/* Title Section (Liquid Track Bloom Transition on Song Switch) */}
+            <div
+              key={station?.current_song?.id ? `${station.current_song.id}-${station.playback_revision}` : "idle"}
+              className="mt-8 liquid-track-switch"
+            >
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Now Playing</p>
               <h2 className="mt-1 text-2xl md:text-3xl font-extrabold text-white tracking-tight">{title}</h2>
             </div>
@@ -656,8 +659,9 @@ export default function Home() {
               <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
                 {station.queue.map((song, i) => (
                   <div
-                    key={`${song.id}-${i}`}
-                    className="glass-subcard flex items-center gap-3 px-3.5 py-2.5 text-xs"
+                    key={`${song.id}-${song.title}`}
+                    className="glass-subcard liquid-queue-item flex items-center gap-3 px-3.5 py-2.5 text-xs"
+                    style={{ animationDelay: `${i * 35}ms` }}
                   >
                     <span className="w-5 text-center font-mono font-bold text-[#00CEC8]">{i + 1}</span>
                     <div className="min-w-0 flex-1">
