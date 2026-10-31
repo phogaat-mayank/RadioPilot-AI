@@ -224,8 +224,8 @@ export default function GlassAudioPlayer({
       style={{
         background:
           "linear-gradient(145deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 42%, rgba(18, 23, 34, 0.48) 100%), rgba(20, 25, 36, 0.58)",
-        backdropFilter: "blur(32px) saturate(210%)",
-        WebkitBackdropFilter: "blur(32px) saturate(210%)",
+        backdropFilter: "blur(18px) saturate(180%)",
+        WebkitBackdropFilter: "blur(18px) saturate(180%)",
         border: "1px solid rgba(255, 255, 255, 0.14)",
         boxShadow:
           "inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.24), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35), 0 16px 36px -8px rgba(0, 0, 0, 0.65)",

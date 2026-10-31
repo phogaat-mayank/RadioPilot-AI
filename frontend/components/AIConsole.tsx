@@ -770,7 +770,7 @@ export default function AIConsole({ token }: Props) {
   };
 
   return (
-    <section className="panel panel-floating-delayed flex flex-col overflow-hidden">
+    <section className="panel flex flex-col overflow-hidden">
       {/* Clean Studio Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-white/5 p-4 backdrop-blur-md">
         <div className="flex items-center gap-3">

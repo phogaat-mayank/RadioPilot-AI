@@ -133,9 +133,9 @@ export default function GlassSelect<T extends string | number>({
         } ${disabled ? "opacity-50 cursor-not-allowed" : "hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]"}`}
         style={{
           background:
-            "linear-gradient(145deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(18, 22, 32, 0.48) 100%), rgba(20, 24, 34, 0.55)",
-          backdropFilter: "blur(28px) saturate(210%)",
-          WebkitBackdropFilter: "blur(28px) saturate(210%)",
+            "linear-gradient(145deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(18, 22, 32, 0.50) 100%), rgba(20, 24, 34, 0.60)",
+          backdropFilter: "blur(16px) saturate(180%)",
+          WebkitBackdropFilter: "blur(16px) saturate(180%)",
         }}
       >
         <div className="flex min-w-0 items-center gap-2 truncate">

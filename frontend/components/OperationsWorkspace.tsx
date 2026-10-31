@@ -246,7 +246,7 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
     .sort((a, b) => new Date(a.run_at).getTime() - new Date(b.run_at).getTime());
   const pastCount = schedules.filter((s) => !s.enabled || new Date(s.run_at).getTime() < nowMs - 5 * 60 * 1000).length;
 
-  return <section className="panel panel-floating p-6 relative z-20">
+  return <section className="panel p-6 relative z-20">
     <div className="glass-capsule-bar inline-flex items-center gap-1 p-1">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={`glass-capsule-btn ${tab === item.id ? "glass-capsule-btn-active" : ""}`}>{item.label}</button>)}</div>
     {notice && (
       <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[#FF9C5F]/30 bg-[#FF9C5F]/10 backdrop-blur-md px-4 py-2.5 text-xs text-[#FCEFC3]">
