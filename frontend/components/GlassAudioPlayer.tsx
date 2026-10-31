@@ -243,11 +243,11 @@ export default function GlassAudioPlayer({
 
       {/* Glass Player Capsule Controls */}
       <div className="flex h-12 w-full items-center gap-3 px-3.5 sm:px-4">
-        {/* Play / Pause Toggle Button */}
+        {/* Play / Pause Toggle Button with Liquid Spring Physics */}
         <button
           type="button"
           onClick={onTogglePlay}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-slate-950 shadow-md shadow-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          className="liquid-shimmer grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-slate-950 shadow-md shadow-white/30 transition-transform duration-250 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-110 hover:shadow-[0_0_16px_rgba(0,206,200,0.45)] active:scale-90 cursor-pointer"
           title={isPlaying ? "Pause audio" : "Play audio"}
           aria-label={isPlaying ? "Pause" : "Play"}
         >
@@ -279,13 +279,15 @@ export default function GlassAudioPlayer({
               isSeeking ? "h-2" : "h-1.5 group-hover/track:h-2"
             }`}
           >
-            {/* Filled Caribbean Turquoise Progress Line (Instant zero-latency positioning) */}
+            {/* Filled Caribbean Turquoise Progress Line (Liquid wave animation during active playback) */}
             <div
-              className="h-full rounded-full"
+              className={`h-full rounded-full ${isPlaying ? "liquid-scrubber-progress" : ""}`}
               style={{
                 width: `${progressPercent}%`,
-                background: "linear-gradient(90deg, #00CEC8 0%, #00CEC8 100%)",
-                boxShadow: "0 0 10px rgba(0, 206, 200, 0.5)",
+                background: isPlaying
+                  ? undefined
+                  : "linear-gradient(90deg, #00CEC8 0%, #00CEC8 100%)",
+                boxShadow: "0 0 12px rgba(0, 206, 200, 0.55)",
               }}
             />
           </div>
@@ -308,30 +310,22 @@ export default function GlassAudioPlayer({
           <button
             type="button"
             onClick={() => setShowMenu((prev) => !prev)}
-            className="grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:text-white transition hover:bg-white/10 active:scale-95 cursor-pointer"
+            className="grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:text-white transition-all duration-200 hover:bg-white/10 active:scale-90 active:rotate-90 cursor-pointer"
             title="Audio options"
             aria-label="Audio options"
           >
             <MoreVertical size={16} />
           </button>
 
-          {/* Floating Glass Options Popover */}
+          {/* Liquid Frosted Glass Options Popover */}
           {showMenu && (
             <div
-              className="absolute right-0 bottom-full mb-2 z-50 w-44 rounded-2xl p-1.5 space-y-1 border border-white/14 animate-in fade-in zoom-in-95 duration-150 text-xs shadow-2xl"
-              style={{
-                background:
-                  "linear-gradient(140deg, rgba(255, 255, 255, 0.09) 0%, rgba(18, 22, 32, 0.96) 40%, rgba(10, 13, 19, 0.98) 100%)",
-                backdropFilter: "blur(36px) saturate(210%)",
-                WebkitBackdropFilter: "blur(36px) saturate(210%)",
-                boxShadow:
-                  "0 25px 60px -10px rgba(0, 0, 0, 0.92), inset 0 1.5px 1px rgba(255, 255, 255, 0.25)",
-              }}
+              className="absolute right-0 bottom-full mb-2 z-50 w-44 rounded-2xl p-1.5 space-y-1 liquid-dropdown-menu text-xs"
             >
               <button
                 type="button"
                 onClick={restartSong}
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-200 hover:bg-white/10 hover:text-white transition cursor-pointer"
+                className="liquid-dropdown-item flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-200 hover:text-white cursor-pointer"
               >
                 <RotateCcw size={14} className="text-[#00CEC8]" />
                 <span>Restart song</span>
@@ -340,8 +334,8 @@ export default function GlassAudioPlayer({
               <button
                 type="button"
                 onClick={toggleLoop}
-                className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition cursor-pointer ${
-                  isLooping ? "bg-[#00CEC8]/20 text-[#00CEC8] font-semibold" : "text-slate-200 hover:bg-white/10 hover:text-white"
+                className={`liquid-dropdown-item flex w-full items-center justify-between rounded-xl px-3 py-2 text-left cursor-pointer ${
+                  isLooping ? "bg-[#00CEC8]/20 text-[#00CEC8] font-semibold border border-[#00CEC8]/40" : "text-slate-200 hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -362,10 +356,10 @@ export default function GlassAudioPlayer({
                   key={rate}
                   type="button"
                   onClick={() => handleRateChange(rate)}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition cursor-pointer ${
+                  className={`liquid-dropdown-item flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left cursor-pointer ${
                     playbackRate === rate
-                      ? "bg-[#00CEC8]/20 text-[#00CEC8] font-bold"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white"
+                      ? "bg-[#00CEC8]/20 text-[#00CEC8] font-bold border border-[#00CEC8]/40"
+                      : "text-slate-300 hover:text-white"
                   }`}
                 >
                   <span>{rate === 1 ? "Normal (1x)" : `${rate}x`}</span>
@@ -379,4 +373,3 @@ export default function GlassAudioPlayer({
     </div>
   );
 }
-

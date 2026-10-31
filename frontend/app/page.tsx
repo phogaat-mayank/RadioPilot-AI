@@ -342,8 +342,16 @@ export default function Home() {
 
   if (!token)
     return (
-      <main className="grid min-h-screen place-items-center p-6">
-        <form onSubmit={login} className="panel login-card w-full max-w-md space-y-6 p-8">
+      <main className="relative grid min-h-screen place-items-center p-6 overflow-hidden">
+        {/* Floating 3D Liquid Light Orbs (Apple-grade organic refraction) */}
+        <div className="pointer-events-none fixed inset-0 overflow-hidden z-0 select-none">
+          <div className="liquid-orb-cyan absolute -top-24 -left-24 h-96 w-96 rounded-full opacity-60" />
+          <div className="liquid-orb-coral absolute top-1/3 -right-28 h-[28rem] w-[28rem] rounded-full opacity-50" />
+          <div className="liquid-orb-vermilion absolute -bottom-32 left-1/4 h-96 w-96 rounded-full opacity-45" />
+          <div className="liquid-orb-cream absolute top-2/3 right-1/3 h-80 w-80 rounded-full opacity-40" />
+        </div>
+
+        <form onSubmit={login} className="panel panel-floating login-card relative z-10 w-full max-w-md space-y-6 p-8">
           <div className="flex items-center gap-3">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#00CEC8] text-[#032023] shadow-lg shadow-[#00CEC8]/25">
               <Radio size={24} />
@@ -383,9 +391,18 @@ export default function Home() {
     );
 
   return (
-    <main className="min-h-screen p-4 md:p-8">
-      {/* Floating Capsule Header (Exact homage to reference image top bar) */}
-      <header className="mx-auto mb-7 flex max-w-7xl flex-wrap items-center justify-between gap-4">
+    <main className="relative min-h-screen p-4 md:p-8 overflow-x-hidden">
+      {/* Floating 3D Liquid Light Orbs (Refract dynamically through acrylic glassmorphism) */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0 select-none">
+        <div className="liquid-orb-cyan absolute -top-32 -left-20 h-[34rem] w-[34rem] rounded-full opacity-50" />
+        <div className="liquid-orb-coral absolute top-1/4 -right-24 h-[30rem] w-[30rem] rounded-full opacity-45" />
+        <div className="liquid-orb-vermilion absolute bottom-10 left-1/3 h-[32rem] w-[32rem] rounded-full opacity-40" />
+        <div className="liquid-orb-cream absolute top-2/3 -left-16 h-88 w-88 rounded-full opacity-35" />
+      </div>
+
+      <div className="relative z-10">
+        {/* Floating Capsule Header (Exact homage to reference image top bar) */}
+        <header className="mx-auto mb-7 flex max-w-7xl flex-wrap items-center justify-between gap-4">
         {/* Left: Round Search / Brand Icon Capsule */}
         <div className="flex items-center gap-3">
           <div className="glass-capsule-bar grid h-11 w-11 place-items-center rounded-full text-white">
@@ -457,8 +474,8 @@ export default function Home() {
 
       <section className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-5">
-          {/* NOW PLAYING / ACTIVITY PANEL (Styled after the reference card) */}
-          <section className="panel p-6">
+          {/* NOW PLAYING / ACTIVITY PANEL (Styled after the reference card with 3D liquid float) */}
+          <section className="panel panel-floating p-6">
             <div className="flex items-center justify-between">
               <span
                 className={
@@ -624,8 +641,8 @@ export default function Home() {
             </div>
           </section>
 
-          {/* LIVE QUEUE PANEL */}
-          <section className="panel p-6">
+          {/* LIVE QUEUE PANEL (3D liquid float delayed) */}
+          <section className="panel panel-floating-delayed p-6">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ListMusic size={19} className="text-[#00CEC8]" />
@@ -796,6 +813,7 @@ export default function Home() {
           </section>
         </aside>
       </section>
+      </div>
     </main>
   );
 }

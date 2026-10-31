@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, ReactNode } from "react";
+import { useEffect, useRef, useState, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 export type GlassSelectOption<T extends string | number> = {
@@ -27,9 +27,19 @@ export default function GlassSelect<T extends string | number>({
   disabled = false,
 }: Props<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedIndex = options.findIndex((opt) => opt.value === value);
+  const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+
+  // Sync highlightedIndex with selectedIndex when opening
+  useEffect(() => {
+    if (isOpen) {
+      setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    }
+  }, [isOpen, selectedIndex]);
 
   // Close when clicking outside
   useEffect(() => {
@@ -46,41 +56,86 @@ export default function GlassSelect<T extends string | number>({
     };
   }, [isOpen]);
 
-  // Handle escape key
+  // Scroll highlighted item into view if navigating with keyboard
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isOpen) {
-        setIsOpen(false);
+    if (isOpen && menuRef.current && highlightedIndex >= 0) {
+      const items = menuRef.current.querySelectorAll<HTMLElement>("[data-select-item]");
+      const currentItem = items[highlightedIndex];
+      if (currentItem) {
+        currentItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+    }
+  }, [isOpen, highlightedIndex]);
 
   const handleSelect = (val: T) => {
     onChange(val);
     setIsOpen(false);
   };
 
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
+
+    if (!isOpen) {
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setIsOpen(true);
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case "Escape":
+      case "Tab":
+        e.preventDefault();
+        setIsOpen(false);
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        setHighlightedIndex((prev) => (prev + 1 < options.length ? prev + 1 : 0));
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setHighlightedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : options.length - 1));
+        break;
+      case "Home":
+        e.preventDefault();
+        setHighlightedIndex(0);
+        break;
+      case "End":
+        e.preventDefault();
+        setHighlightedIndex(options.length - 1);
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (highlightedIndex >= 0 && highlightedIndex < options.length) {
+          handleSelect(options[highlightedIndex].value);
+        }
+        break;
+    }
+  };
+
   return (
-    <div ref={containerRef} className={`relative w-full ${isOpen ? "z-50" : "z-10"} ${className}`}>
-      {/* Oval Shaped Glass Tile Trigger */}
+    <div
+      ref={containerRef}
+      onKeyDown={handleKeyDown}
+      className={`relative w-full ${isOpen ? "z-50" : "z-10"} ${className}`}
+    >
+      {/* Liquid Frosted Glass Capsule Trigger */}
       <button
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
-        className={`group flex w-full items-center justify-between gap-2.5 rounded-full px-4 py-2.5 text-xs sm:text-sm font-medium transition-all duration-200 outline-none ${
+        className={`group relative flex w-full items-center justify-between gap-2.5 rounded-full px-4 py-2.5 text-xs sm:text-sm font-medium transition-all duration-300 outline-none liquid-shimmer cursor-pointer ${
           isOpen
-            ? "border border-[#00CEC8]/60 shadow-[0_0_0_2px_rgba(0,206,200,0.22),inset_0_1.5px_1px_rgba(255,255,255,0.28)]"
-            : "border border-white/12 hover:border-white/25 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.2),0_8px_20px_-4px_rgba(0,0,0,0.45)]"
-        } ${
-          disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-        }`}
+            ? "border border-[#00CEC8]/70 shadow-[0_0_0_2px_rgba(0,206,200,0.25),inset_0_2px_1.5px_rgba(255,255,255,0.35),0_12px_28px_-6px_rgba(0,0,0,0.65)]"
+            : "border border-white/14 hover:border-white/28 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.22),0_8px_20px_-4px_rgba(0,0,0,0.45)] hover:shadow-[inset_0_2px_1.5px_rgba(255,255,255,0.32),0_12px_26px_-4px_rgba(0,0,0,0.55),0_0_16px_rgba(0,206,200,0.12)]"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : "hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]"}`}
         style={{
           background:
-            "linear-gradient(145deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(18, 22, 32, 0.45) 100%), rgba(20, 24, 34, 0.52)",
-          backdropFilter: "blur(24px) saturate(190%)",
-          WebkitBackdropFilter: "blur(24px) saturate(190%)",
+            "linear-gradient(145deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(18, 22, 32, 0.48) 100%), rgba(20, 24, 34, 0.55)",
+          backdropFilter: "blur(28px) saturate(210%)",
+          WebkitBackdropFilter: "blur(28px) saturate(210%)",
         }}
       >
         <div className="flex min-w-0 items-center gap-2 truncate">
@@ -92,61 +147,46 @@ export default function GlassSelect<T extends string | number>({
 
         <ChevronDown
           size={16}
-          className={`shrink-0 transition-transform duration-200 ${
-            isOpen ? "rotate-180 text-[#00CEC8]" : "text-slate-400 group-hover:text-slate-200"
+          className={`shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+            isOpen ? "rotate-180 text-[#00CEC8] scale-110" : "text-slate-400 group-hover:text-slate-200"
           }`}
         />
       </button>
 
-      {/* Floating Frosted Glass Dropdown Menu (No OS blue highlight) */}
+      {/* Apple-Grade Liquid Frosted Glass Dropdown Menu */}
       {isOpen && (
         <div
-          className="absolute left-0 right-0 z-[100] mt-1.5 max-h-60 overflow-y-auto rounded-2xl p-1.5 space-y-1 border border-white/14 animate-in fade-in zoom-in-95 duration-150"
-          style={{
-            background:
-              "linear-gradient(140deg, rgba(255, 255, 255, 0.08) 0%, rgba(18, 22, 32, 0.95) 35%, rgba(11, 14, 20, 0.98) 100%)",
-            backdropFilter: "blur(40px) saturate(210%)",
-            WebkitBackdropFilter: "blur(40px) saturate(210%)",
-            boxShadow:
-              "0 25px 60px -10px rgba(0, 0, 0, 0.92), inset 0 1.5px 1px rgba(255, 255, 255, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.06)",
-          }}
+          ref={menuRef}
+          className="absolute left-0 right-0 z-[100] mt-2 max-h-64 overflow-y-auto rounded-[20px] p-1.5 space-y-1 liquid-dropdown-menu"
         >
           {options.length === 0 ? (
             <div className="px-3 py-2 text-center text-xs text-slate-400">No options available</div>
           ) : (
-            options.map((option) => {
+            options.map((option, idx) => {
               const isSelected = option.value === value;
+              const isHighlighted = idx === highlightedIndex;
+
               return (
                 <div
                   key={String(option.value)}
+                  data-select-item
                   onClick={() => handleSelect(option.value)}
-                  className={`group flex items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-xs transition-all duration-150 cursor-pointer ${
+                  onMouseEnter={() => setHighlightedIndex(idx)}
+                  className={`group/item flex items-center justify-between gap-2.5 rounded-xl px-3.5 py-2 text-xs transition-all duration-200 cursor-pointer liquid-dropdown-item ${
                     isSelected
-                      ? "text-white font-semibold border border-[#00CEC8]/45 shadow-[inset_0_1px_1.5px_rgba(252,239,195,0.25),0_4px_12px_rgba(0,0,0,0.35)]"
-                      : "text-slate-300 hover:text-white hover:border hover:border-white/14 hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)]"
+                      ? "text-white font-semibold border border-[#00CEC8]/55 shadow-[inset_0_1.5px_1px_rgba(252,239,195,0.30),0_4px_16px_rgba(0,206,200,0.24)]"
+                      : isHighlighted
+                      ? "text-white border border-white/18 shadow-[inset_0_1px_1px_rgba(255,255,255,0.22)]"
+                      : "text-slate-300 border border-transparent"
                   }`}
-                  style={
-                    isSelected
-                      ? {
-                          background:
-                            "linear-gradient(135deg, rgba(0, 206, 200, 0.22) 0%, rgba(252, 239, 195, 0.08) 100%), rgba(16, 28, 44, 0.85)",
-                          backdropFilter: "blur(16px)",
-                          WebkitBackdropFilter: "blur(16px)",
-                        }
-                      : {
-                          background: "transparent",
-                        }
-                  }
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background =
-                        "linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(28, 35, 48, 0.55)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background = "transparent";
-                    }
+                  style={{
+                    background: isSelected
+                      ? "linear-gradient(135deg, rgba(0, 206, 200, 0.28) 0%, rgba(252, 239, 195, 0.10) 100%), rgba(16, 28, 44, 0.88)"
+                      : isHighlighted
+                      ? "linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 100%), rgba(28, 35, 48, 0.60)"
+                      : "transparent",
+                    backdropFilter: "blur(18px)",
+                    WebkitBackdropFilter: "blur(18px)",
                   }}
                 >
                   <div className="flex min-w-0 items-center gap-2 truncate">
@@ -155,7 +195,7 @@ export default function GlassSelect<T extends string | number>({
                   </div>
 
                   {isSelected && (
-                    <div className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[#00CEC8] text-[#032023] shadow-sm shadow-[#00CEC8]/50">
+                    <div className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[#00CEC8] text-[#032023] shadow-md shadow-[#00CEC8]/60 animate-in zoom-in-75 duration-150">
                       <Check size={11} strokeWidth={3} />
                     </div>
                   )}
@@ -168,4 +208,3 @@ export default function GlassSelect<T extends string | number>({
     </div>
   );
 }
-
