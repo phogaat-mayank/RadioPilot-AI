@@ -354,7 +354,7 @@ export default function GlassDateTimePicker({
                   }}
                   className="bg-transparent text-white font-bold text-xs w-full focus:outline-none cursor-pointer"
                 >
-                  {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                  {Array.from({ length: 60 }, (_, i) => i).map((m) => (
                     <option key={`m-${m}`} value={m} className="bg-slate-900 text-white">
                       {pad(m)}
                     </option>
