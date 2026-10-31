@@ -15,13 +15,12 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
           className="fixed inset-0 -z-50 pointer-events-none overflow-hidden select-none"
           aria-hidden="true"
         >
-          {/* Main 3D On-Air Studio Image Layer with Enhanced Contrast, Saturation & Bokeh Blur */}
+          {/* Main 3D On-Air Studio Image Layer (Crisp, High-Quality, Unblurred 2K) */}
           <div
             className="absolute inset-0 bg-cover bg-no-repeat bg-center"
             style={{
               backgroundImage: "url('/on-air-bg.jpg')",
-              filter: "contrast(1.28) saturate(1.35) brightness(0.60) blur(7px)",
-              transform: "scale(1.08)",
+              filter: "contrast(1.08) saturate(1.15) brightness(0.72)",
             }}
           />
 
@@ -30,17 +29,17 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
             className="absolute inset-0"
             style={{
               background: `
-                radial-gradient(circle at 26% 36%, rgba(235, 66, 3, 0.38) 0%, transparent 45%),
-                radial-gradient(circle at 38% 42%, rgba(255, 156, 95, 0.24) 0%, transparent 42%),
-                radial-gradient(circle at 18% 12%, rgba(0, 206, 200, 0.16) 0%, transparent 35%),
-                radial-gradient(circle at 86% 82%, rgba(252, 239, 195, 0.12) 0%, transparent 45%),
-                radial-gradient(ellipse 90% 90% at 50% 50%, rgba(7, 9, 13, 0.20) 0%, rgba(5, 7, 10, 0.82) 100%)
+                radial-gradient(circle at 26% 36%, rgba(235, 66, 3, 0.28) 0%, transparent 45%),
+                radial-gradient(circle at 38% 42%, rgba(255, 156, 95, 0.18) 0%, transparent 42%),
+                radial-gradient(circle at 18% 12%, rgba(0, 206, 200, 0.12) 0%, transparent 35%),
+                radial-gradient(circle at 86% 82%, rgba(252, 239, 195, 0.10) 0%, transparent 45%),
+                radial-gradient(ellipse 90% 90% at 50% 50%, rgba(7, 9, 13, 0.10) 0%, rgba(5, 7, 10, 0.72) 100%)
               `,
             }}
           />
 
           {/* Vignette Shadow for Maximum Text Contrast on Floating Tiles */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#06080d]/70 via-transparent to-[#06080d]/85" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#06080d]/55 via-transparent to-[#06080d]/75" />
         </div>
 
         {/* Floating Glass Workspace */}
