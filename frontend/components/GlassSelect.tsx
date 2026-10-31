@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState, useMemo, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 
 export type GlassSelectOption<T extends string | number> = {
   value: T;
@@ -27,19 +27,43 @@ export default function GlassSelect<T extends string | number>({
   disabled = false,
 }: Props<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedIndex = options.findIndex((opt) => opt.value === value);
-  const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+  // Filter options if large list has active search query
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    const q = searchQuery.toLowerCase().trim();
+    return options.filter((opt) => opt.label.toLowerCase().includes(q));
+  }, [options, searchQuery]);
 
-  // Sync highlightedIndex with selectedIndex when opening
+  const selectedIndex = filteredOptions.findIndex((opt) => opt.value === value);
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  // Reset or initialize state when opening / closing
   useEffect(() => {
     if (isOpen) {
       setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+      setSearchQuery("");
+      // Scroll to selected item inside the dropdown without moving the page window
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current && selectedIndex > 0) {
+          const items = scrollContainerRef.current.querySelectorAll<HTMLElement>("[data-select-item]");
+          const target = items[selectedIndex];
+          if (target) {
+            scrollContainerRef.current.scrollTop = Math.max(0, target.offsetTop - 40);
+          }
+        }
+      });
+    } else {
+      setSearchQuery("");
     }
-  }, [isOpen, selectedIndex]);
+  }, [isOpen]);
 
   // Close when clicking outside
   useEffect(() => {
@@ -56,20 +80,29 @@ export default function GlassSelect<T extends string | number>({
     };
   }, [isOpen]);
 
-  // Scroll highlighted item into view if navigating with keyboard
-  useEffect(() => {
-    if (isOpen && menuRef.current && highlightedIndex >= 0) {
-      const items = menuRef.current.querySelectorAll<HTMLElement>("[data-select-item]");
-      const currentItem = items[highlightedIndex];
-      if (currentItem) {
-        currentItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }
-    }
-  }, [isOpen, highlightedIndex]);
-
   const handleSelect = (val: T) => {
     onChange(val);
     setIsOpen(false);
+  };
+
+  // Scroll to keep highlighted item in view during KEYBOARD navigation ONLY
+  const scrollToHighlighted = (index: number) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const items = container.querySelectorAll<HTMLElement>("[data-select-item]");
+    const target = items[index];
+    if (!target) return;
+
+    const itemTop = target.offsetTop;
+    const itemBottom = itemTop + target.offsetHeight;
+    const containerTop = container.scrollTop;
+    const containerBottom = containerTop + container.clientHeight;
+
+    if (itemTop < containerTop) {
+      container.scrollTo({ top: Math.max(0, itemTop - 6), behavior: "smooth" });
+    } else if (itemBottom > containerBottom) {
+      container.scrollTo({ top: itemBottom - container.clientHeight + 6, behavior: "smooth" });
+    }
   };
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -91,25 +124,39 @@ export default function GlassSelect<T extends string | number>({
         break;
       case "ArrowDown":
         e.preventDefault();
-        setHighlightedIndex((prev) => (prev + 1 < options.length ? prev + 1 : 0));
+        setHighlightedIndex((prev) => {
+          const next = prev + 1 < filteredOptions.length ? prev + 1 : 0;
+          scrollToHighlighted(next);
+          return next;
+        });
         break;
       case "ArrowUp":
         e.preventDefault();
-        setHighlightedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : options.length - 1));
+        setHighlightedIndex((prev) => {
+          const next = prev - 1 >= 0 ? prev - 1 : filteredOptions.length - 1;
+          scrollToHighlighted(next);
+          return next;
+        });
         break;
       case "Home":
         e.preventDefault();
         setHighlightedIndex(0);
+        scrollToHighlighted(0);
         break;
       case "End":
         e.preventDefault();
-        setHighlightedIndex(options.length - 1);
+        setHighlightedIndex(filteredOptions.length - 1);
+        scrollToHighlighted(filteredOptions.length - 1);
         break;
       case "Enter":
       case " ":
+        if (e.target === searchInputRef.current && e.key === " ") {
+          // Allow space in search input
+          return;
+        }
         e.preventDefault();
-        if (highlightedIndex >= 0 && highlightedIndex < options.length) {
-          handleSelect(options[highlightedIndex].value);
+        if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
+          handleSelect(filteredOptions[highlightedIndex].value);
         }
         break;
     }
@@ -153,50 +200,93 @@ export default function GlassSelect<T extends string | number>({
         />
       </button>
 
-      {/* Apple iOS Liquid Glass Droplet Bloom Dropdown (Faithful to Sample Images & Video) */}
+      {/* Apple iOS Liquid Glass Droplet Bloom Dropdown Container */}
       {isOpen && (
         <div
           ref={menuRef}
-          className="absolute left-0 right-0 z-[100] mt-2.5 max-h-64 overflow-y-auto rounded-[28px] p-2 space-y-1.5 liquid-dropdown-menu"
+          className="absolute left-0 right-0 z-[100] mt-2.5 rounded-[28px] liquid-dropdown-menu"
         >
-          {options.length === 0 ? (
-            <div className="px-4 py-3 text-center text-xs text-slate-400">No options available</div>
-          ) : (
-            options.map((option, idx) => {
-              const isSelected = option.value === value;
-              const isHighlighted = idx === highlightedIndex;
-
-              return (
-                <div
-                  key={String(option.value)}
-                  data-select-item
-                  onClick={() => handleSelect(option.value)}
-                  onMouseEnter={() => setHighlightedIndex(idx)}
-                  className={`group/item flex items-center justify-between gap-3 rounded-full px-4 py-2.5 text-xs transition-all duration-200 cursor-pointer liquid-dropdown-item ${
-                    isSelected
-                      ? "liquid-glass-pill-active"
-                      : isHighlighted
-                      ? "liquid-glass-pill-hover"
-                      : "text-slate-200 border border-transparent hover:text-white"
-                  }`}
-                  style={{
-                    animationDelay: `${idx * 28}ms`,
+          {/* Large list Search Bar */}
+          {options.length >= 8 && (
+            <div className="p-2 pb-1.5 border-b border-white/10 relative z-10">
+              <div className="relative flex items-center">
+                <Search size={13} className="absolute left-3 text-slate-400 pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setHighlightedIndex(0);
                   }}
-                >
-                  <div className="flex min-w-0 items-center gap-2.5 truncate">
-                    {option.icon}
-                    <span className="truncate">{option.label}</span>
-                  </div>
-
-                  {isSelected && (
-                    <div className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-white/30 border border-white/60 text-white shadow-sm shadow-black/40 animate-in zoom-in-75 duration-150">
-                      <Check size={11} strokeWidth={2.8} />
-                    </div>
-                  )}
-                </div>
-              );
-            })
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Filter songs or options..."
+                  className="w-full rounded-full bg-white/10 hover:bg-white/15 focus:bg-white/20 border border-white/20 pl-8 pr-7 py-1 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-white/50 transition"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSearchQuery("");
+                      setHighlightedIndex(0);
+                    }}
+                    className="absolute right-2 text-slate-400 hover:text-white"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
           )}
+
+          {/* Inner Scrollable List with isolated wheel scrolling */}
+          <div
+            ref={scrollContainerRef}
+            onWheel={(e) => e.stopPropagation()}
+            className="max-h-64 sm:max-h-72 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 overscroll-contain liquid-select-scroll"
+          >
+            {filteredOptions.length === 0 ? (
+              <div className="px-4 py-3 text-center text-xs text-slate-400">
+                {searchQuery ? "No matching results" : "No options available"}
+              </div>
+            ) : (
+              filteredOptions.map((option, idx) => {
+                const isSelected = option.value === value;
+                const isHighlighted = idx === highlightedIndex;
+
+                return (
+                  <div
+                    key={String(option.value)}
+                    data-select-item
+                    onClick={() => handleSelect(option.value)}
+                    onMouseEnter={() => setHighlightedIndex(idx)}
+                    className={`group/item flex items-center justify-between gap-3 rounded-full px-4 py-2.5 text-xs transition-all duration-200 cursor-pointer liquid-dropdown-item ${
+                      isSelected
+                        ? "liquid-glass-pill-active"
+                        : isHighlighted
+                        ? "liquid-glass-pill-hover"
+                        : "text-slate-200 border border-transparent hover:text-white"
+                    }`}
+                    style={{
+                      animationDelay: `${Math.min(idx, 5) * 20}ms`,
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5 truncate">
+                      {option.icon}
+                      <span className="truncate">{option.label}</span>
+                    </div>
+
+                    {isSelected && (
+                      <div className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-white/30 border border-white/60 text-white shadow-sm shadow-black/40 animate-in zoom-in-75 duration-150">
+                        <Check size={11} strokeWidth={2.8} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>
