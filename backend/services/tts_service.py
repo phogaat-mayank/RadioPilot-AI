@@ -146,9 +146,14 @@ class TTSService:
     def _synthesize_sync(self, text: str, voice_id: str, out_wav_path: Path) -> float:
         """Synchronously generate speech and write 16-bit mono WAV audio."""
         voice = self._get_or_load_voice(voice_id)
+        meta = SUPPORTED_VOICES.get(voice_id, {})
+        sample_rate = meta.get("sample_rate", 22050)
 
         with wave.open(str(out_wav_path), "wb") as wav_file:
-            voice.synthesize_wav(text, wav_file)
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            voice.synthesize_wav(text, wav_file, set_wav_format=False)
 
         # Calculate exact duration
         with wave.open(str(out_wav_path), "rb") as check_wav:
