@@ -391,76 +391,76 @@ export default function Home() {
       <div className="liquid-ambient-bg" />
 
       <div className="relative z-10">
-        {/* Floating Capsule Header (Exact homage to reference image top bar) */}
-        <header className="mx-auto mb-7 flex max-w-7xl flex-wrap items-center justify-between gap-4">
-        {/* Left: Round Search / Brand Icon Capsule */}
-        <div className="flex items-center gap-3">
-          <div className="glass-capsule-bar grid h-11 w-11 place-items-center rounded-full text-white">
-            <Radio size={20} className="text-[#00CEC8]" />
+        {/* Top Dashboard Tile (Unified Liquid Glassmorphism matching all other tiles) */}
+        <header className="panel mx-auto mb-7 flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
+          {/* Left: Brand Icon & Title */}
+          <div className="flex items-center gap-3">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 border border-white/20 text-white shadow-inner">
+              <Radio size={22} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-white tracking-wide">RadioPilot AI</h1>
+              <p className="text-[11px] text-slate-400">FM Broadcast Ops Center</p>
+            </div>
           </div>
-          <div className="hidden sm:block">
-            <h1 className="text-base font-bold text-white tracking-wide">RadioPilot AI</h1>
-            <p className="text-[11px] text-slate-400">FM Broadcast Ops Center</p>
-          </div>
-        </div>
 
-        {/* Center: The Signature Floating Capsule Nav Bar from Reference Image */}
-        <nav className="glass-capsule-bar flex items-center gap-1 p-1.5 text-xs">
-          <button
-            onClick={() => handleNav("dashboard")}
-            className={`glass-capsule-btn ${navSection === "dashboard" ? "glass-capsule-btn-active" : ""}`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => handleNav("library")}
-            className={`glass-capsule-btn ${navSection === "library" ? "glass-capsule-btn-active" : ""}`}
-          >
-            Library
-          </button>
-          <button
-            onClick={() => handleNav("playlists")}
-            className={`glass-capsule-btn ${navSection === "playlists" ? "glass-capsule-btn-active" : ""}`}
-          >
-            Playlists
-          </button>
-          <button
-            onClick={() => handleNav("scheduler")}
-            className={`glass-capsule-btn ${navSection === "scheduler" ? "glass-capsule-btn-active" : ""}`}
-          >
-            Scheduler
-          </button>
-          <button
-            onClick={() => handleNav("ai")}
-            className={`glass-capsule-btn ${navSection === "ai" ? "glass-capsule-btn-active" : ""}`}
-          >
-            AI Studio
-          </button>
-        </nav>
+          {/* Center: The Signature Floating Capsule Nav Bar */}
+          <nav className="glass-capsule-bar flex items-center gap-1 p-1.5 text-xs">
+            <button
+              onClick={() => handleNav("dashboard")}
+              className={`glass-capsule-btn ${navSection === "dashboard" ? "glass-capsule-btn-active" : ""}`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => handleNav("library")}
+              className={`glass-capsule-btn ${navSection === "library" ? "glass-capsule-btn-active" : ""}`}
+            >
+              Library
+            </button>
+            <button
+              onClick={() => handleNav("playlists")}
+              className={`glass-capsule-btn ${navSection === "playlists" ? "glass-capsule-btn-active" : ""}`}
+            >
+              Playlists
+            </button>
+            <button
+              onClick={() => handleNav("scheduler")}
+              className={`glass-capsule-btn ${navSection === "scheduler" ? "glass-capsule-btn-active" : ""}`}
+            >
+              Scheduler
+            </button>
+            <button
+              onClick={() => handleNav("ai")}
+              className={`glass-capsule-btn ${navSection === "ai" ? "glass-capsule-btn-active" : ""}`}
+            >
+              AI Studio
+            </button>
+          </nav>
 
-        {/* Right: Operator Profile Capsule */}
-        <div className="flex items-center gap-2">
-          <div className="glass-capsule-bar flex items-center gap-2 px-3 py-1.5 text-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#EB4203] opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#EB4203]"></span>
-            </span>
-            <span className="font-semibold text-slate-200">On Air</span>
-            <span className="text-slate-600">|</span>
-            <span className="max-w-[120px] truncate text-slate-400">admin</span>
+          {/* Right: Operator Profile Capsule */}
+          <div className="flex items-center gap-2.5">
+            <div className="glass-capsule-bar flex items-center gap-2 px-3 py-1.5 text-xs">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#EB4203] opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#EB4203]"></span>
+              </span>
+              <span className="font-semibold text-slate-200">On Air</span>
+              <span className="text-slate-600">|</span>
+              <span className="max-w-[120px] truncate text-slate-400">admin</span>
+            </div>
+            <button
+              onClick={() => {
+                localStorage.removeItem("radiopilot_token");
+                setToken(null);
+              }}
+              className="glass-capsule-bar grid h-9 w-9 place-items-center rounded-full text-slate-400 hover:text-white transition cursor-pointer"
+              title="Sign out"
+            >
+              <LogOut size={14} />
+            </button>
           </div>
-          <button
-            onClick={() => {
-              localStorage.removeItem("radiopilot_token");
-              setToken(null);
-            }}
-            className="glass-capsule-bar grid h-9 w-9 place-items-center rounded-full text-slate-400 hover:text-white transition"
-            title="Sign out"
-          >
-            <LogOut size={14} />
-          </button>
-        </div>
-      </header>
+        </header>
 
       <section className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-5">

@@ -327,7 +327,7 @@ export default function GlassAudioPlayer({
                 onClick={restartSong}
                 className="liquid-dropdown-item flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-200 hover:text-white cursor-pointer"
               >
-                <RotateCcw size={14} className="text-[#00CEC8]" />
+                <RotateCcw size={14} className="text-white" />
                 <span>Restart song</span>
               </button>
 
@@ -335,19 +335,21 @@ export default function GlassAudioPlayer({
                 type="button"
                 onClick={toggleLoop}
                 className={`liquid-dropdown-item flex w-full items-center justify-between rounded-xl px-3 py-2 text-left cursor-pointer ${
-                  isLooping ? "bg-[#00CEC8]/20 text-[#00CEC8] font-semibold border border-[#00CEC8]/40" : "text-slate-200 hover:text-white"
+                  isLooping
+                    ? "bg-white/18 text-white font-semibold border border-white/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.30)]"
+                    : "text-slate-200 hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Repeat size={14} className={isLooping ? "text-[#00CEC8]" : "text-slate-400"} />
+                  <Repeat size={14} className={isLooping ? "text-white" : "text-slate-400"} />
                   <span>Loop track</span>
                 </div>
-                {isLooping && <Check size={13} className="text-[#00CEC8]" />}
+                {isLooping && <Check size={13} className="text-white" />}
               </button>
 
               <div className="my-1 border-t border-white/10" />
 
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Playback Speed
               </div>
 
@@ -358,12 +360,12 @@ export default function GlassAudioPlayer({
                   onClick={() => handleRateChange(rate)}
                   className={`liquid-dropdown-item flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left cursor-pointer ${
                     playbackRate === rate
-                      ? "bg-[#00CEC8]/20 text-[#00CEC8] font-bold border border-[#00CEC8]/40"
+                      ? "bg-white/18 text-white font-bold border border-white/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.30)]"
                       : "text-slate-300 hover:text-white"
                   }`}
                 >
                   <span>{rate === 1 ? "Normal (1x)" : `${rate}x`}</span>
-                  {playbackRate === rate && <Check size={12} className="text-[#00CEC8]" />}
+                  {playbackRate === rate && <Check size={12} className="text-white" />}
                 </button>
               ))}
             </div>
