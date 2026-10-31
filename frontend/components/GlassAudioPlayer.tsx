@@ -223,12 +223,12 @@ export default function GlassAudioPlayer({
       className={`relative w-full rounded-full transition-all ${className}`}
       style={{
         background:
-          "linear-gradient(145deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 42%, rgba(18, 23, 34, 0.48) 100%), rgba(20, 25, 36, 0.58)",
-        backdropFilter: "blur(18px) saturate(180%)",
-        WebkitBackdropFilter: "blur(18px) saturate(180%)",
-        border: "1px solid rgba(255, 255, 255, 0.14)",
+          "linear-gradient(145deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(16, 20, 30, 0.22) 100%), rgba(16, 20, 30, 0.30)",
+        backdropFilter: "blur(20px) saturate(200%)",
+        WebkitBackdropFilter: "blur(20px) saturate(200%)",
+        border: "1px solid rgba(255, 255, 255, 0.18)",
         boxShadow:
-          "inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.24), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35), 0 16px 36px -8px rgba(0, 0, 0, 0.65)",
+          "inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.32), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.22), 0 16px 36px -8px rgba(0, 0, 0, 0.55)",
       }}
     >
       {/* Hidden native audio element for decoding, streaming, and hardware audio pipeline */}
