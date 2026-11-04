@@ -1,6 +1,5 @@
 """Authentication endpoints."""
 
-from datetime import timedelta
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession

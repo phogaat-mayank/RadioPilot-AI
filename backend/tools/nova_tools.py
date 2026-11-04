@@ -4,18 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-import json
 import logging
 import re
 from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.entities import PlaylistSong, Schedule, Song
+from models.entities import Schedule, Song
 from repositories.radio import RadioRepository
 from schemas.radio import PlaylistCreate, ScheduleCreate
 from services.radio import RadioService
 from tools.music_discovery_tool import MusicDiscoveryTool
-from tools.news_tool import NewsTool
 from tools.script_tool import ScriptTool
 from tools.youtube_tool import YouTubeTool
 

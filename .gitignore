@@ -6,6 +6,6 @@ __pycache__/
 .next/
 node_modules/
 backend/media/
-backend/radiopilot.db
-backend/schema-generation.db
-backend/migration-verify.db
+*.db
+*.db-journal
+*.tsbuildinfo

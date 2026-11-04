@@ -37,7 +37,7 @@ async def test_clear_queue() -> None:
 async def test_repository_delete_all_songs() -> None:
     """Deleting all songs clears playlist associations and nullifies playback history."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-    from models.entities import Base, Playlist, PlaylistSong, PlaybackHistory
+    from models.entities import Base, Playlist, PlaybackHistory
     from repositories.radio import RadioRepository
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
