@@ -176,20 +176,6 @@ class PlaybackController:
             self._queue.clear()
             return count
 
-    async def clear_all(self) -> dict[str, int]:
-        """Stop playback, remove the active on-air track, and clear the entire playback queue."""
-        async with self._lock:
-            self._engine.stop()
-            queue_count = len(self._queue)
-            had_current = self._current is not None
-            self._queue.clear()
-            self._current = None
-            self._status = "stopped"
-            self._position_seconds = 0.0
-            self._started_at = None
-            self._playback_revision += 1
-            return {"queue_cleared": queue_count, "current_cleared": 1 if had_current else 0}
-
     async def interrupt_with_playlist(self, songs: list[Song | SongSnapshot]) -> None:
         """Start a priority playlist and retain the interrupted queue for resumption."""
         if not songs:

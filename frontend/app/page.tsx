@@ -157,12 +157,6 @@ export default function Home() {
   useEffect(() => {
     if (!token || !station?.current_song) {
       setAudioUrl(null);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.removeAttribute("src");
-        audioRef.current.load();
-      }
       return;
     }
     const controller = new AbortController();
@@ -204,12 +198,7 @@ export default function Home() {
     }
     if (station?.status === "playing")
       void player.play().catch(() => setError("Click the audio player once to allow sound in this browser."));
-    if (station?.status === "paused" || station?.status === "stopped") {
-      player.pause();
-      if (station?.status === "stopped" && !station?.current_song) {
-        player.currentTime = 0;
-      }
-    }
+    if (station?.status === "paused" || station?.status === "stopped") player.pause();
   }, [audioUrl, station?.status]);
 
   const title = useMemo(

@@ -34,33 +34,6 @@ async def test_clear_queue() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clear_all_stops_playback_and_clears_current_song() -> None:
-    """clear_all stops playback, unloads current song, and clears the queue."""
-    controller = PlaybackController()
-    song1 = Song(id=1, title="Playing Song", artist="Artist 1", file_path="/tmp/1.mp3")
-    song2 = Song(id=2, title="Queued Song", artist="Artist 2", file_path="/tmp/2.mp3")
-    await controller.queue(song1)
-    await controller.queue(song2)
-    await controller.play()
-
-    state = await controller.state()
-    assert state["status"] == "playing"
-    assert state["current_song"] is not None
-    assert state["current_song"].id == 1
-    assert len(state["queue"]) == 1
-
-    res = await controller.clear_all()
-    assert res["queue_cleared"] == 1
-    assert res["current_cleared"] == 1
-
-    state_after = await controller.state()
-    assert state_after["status"] == "stopped"
-    assert state_after["current_song"] is None
-    assert len(state_after["queue"]) == 0
-    assert state_after["current_position_seconds"] == 0.0
-
-
-@pytest.mark.asyncio
 async def test_repository_delete_all_songs() -> None:
     """Deleting all songs clears playlist associations and nullifies playback history."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker

@@ -455,11 +455,6 @@ export default function AIConsole({ token }: Props) {
       if (data.mode) setStatus(data);
       // Immediately refresh station state, current playing track, volume, and playlists
       window.dispatchEvent(new Event("station-refresh"));
-
-      // If voice mode is active or reply is an on-air news broadcast, speak aloud immediately
-      if (voiceActiveRef.current || replyContent.includes("News Broadcast") || replyContent.includes("1-Minute On-Air News")) {
-        speak(assistantMsg.id, replyContent);
-      }
     } catch (error) {
       const errMsg: ChatMessage = {
         id: Date.now() + 1,
@@ -643,17 +638,12 @@ export default function AIConsole({ token }: Props) {
     };
 
     void checkScheduledNews();
-    const handleStationRefresh = () => {
-      void checkScheduledNews();
-    };
-    window.addEventListener("station-refresh", handleStationRefresh);
-    const scheduledNewsTimer = window.setInterval(() => void checkScheduledNews(), 4000);
+    const scheduledNewsTimer = window.setInterval(() => void checkScheduledNews(), 8000);
 
     return () => {
       voiceActiveRef.current = false;
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
       recognitionRef.current?.abort();
-      window.removeEventListener("station-refresh", handleStationRefresh);
       window.clearInterval(scheduledNewsTimer);
     };
   }, [token]);

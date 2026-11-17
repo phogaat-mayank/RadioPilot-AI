@@ -102,12 +102,6 @@ Voice, Persona & Language:
                         response = "Autopilot mode activated! 🤖 Managing station rotations automatically." if direct_args.get("enabled") else "Switched to Manual mode. 🎛️ Station controls are now in your hands!"
                     elif direct_name == "clear_queue":
                         response = "Live broadcast queue cleared! 🧹"
-                    elif direct_name == "clear_all":
-                        response = "✅ **All clear!**\n\n• **Playback:** Stopped\n• **On-Air Song:** Cleared\n• **Live Queue:** Cleared"
-                    elif direct_name in {"broadcast_news", "get_news"}:
-                        bulletin_data = direct_result.get("bulletin") or {}
-                        script_text = bulletin_data.get("script") or direct_result.get("message")
-                        response = f"📢 **1-Minute On-Air News Broadcast:**\n\n{script_text}\n\n*Music paused for {direct_args.get('duration_seconds', 60)}s for the live broadcast.*"
                     elif direct_name == "play_song":
                         if direct_result.get("status") == "playing":
                             response = f"Now broadcasting '{direct_result.get('title')}' by {direct_result.get('artist')} on air! 🎵"
