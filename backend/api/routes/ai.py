@@ -197,7 +197,7 @@ async def on_air_news(session: SessionDep, _: UserDep) -> dict[str, object] | No
     now = datetime.now(timezone.utc)
     schedules = await RadioRepository(session).list_schedules()
     for schedule in reversed(schedules):
-        if not schedule.enabled or schedule.event_type != "news":
+        if schedule.event_type != "news":
             continue
         metadata = dict(schedule.metadata_json or {})
         broadcast_at = metadata.get("broadcast_at")
@@ -211,7 +211,7 @@ async def on_air_news(session: SessionDep, _: UserDep) -> dict[str, object] | No
         except ValueError:
             continue
         duration = max(30, min(120, int(metadata.get("duration_seconds", 60))))
-        if now <= broadcast_time + timedelta(seconds=duration + 15):
+        if broadcast_time - timedelta(seconds=10) <= now <= broadcast_time + timedelta(seconds=duration + 20):
             return {
                 "schedule_id": schedule.id,
                 "broadcast_at": broadcast_time.isoformat(),

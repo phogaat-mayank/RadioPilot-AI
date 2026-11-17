@@ -43,7 +43,7 @@ class AIService:
             response, data = graph_state["response"], graph_state.get("data", {})
             model = "deterministic"
             if request_type == "chat":
-                history = await self.repository.recent_messages(payload.session_id, limit=16)
+                history = await self.repository.recent_messages(payload.session_id, limit=6)
                 messages_payload = [{"role": msg.role, "content": msg.content} for msg in history]
                 if not any(m["role"] == "user" and m["content"] == payload.prompt for m in messages_payload):
                     messages_payload.append({"role": "user", "content": payload.prompt})
@@ -57,53 +57,21 @@ class AIService:
                 now_local = datetime.now(station_tz)
                 current_time_str = now_local.strftime("%A, %d %B %Y, %I:%M %p").replace(" 0", " ")
 
-                system_prompt = f"""You are NOVA, a charismatic, friendly, and deeply knowledgeable female Radio Jockey (RJ) co-host and universal AI Commander of RadioPilot AI.
+                system_prompt = f"""You are NOVA, the charismatic, energetic, and intelligent female Radio Jockey (RJ) and universal AI Commander of RadioPilot AI.
 
-CURRENT STATION CLOCK & TIMEZONE:
-- Location / Station Timezone: Asia/Kolkata (IST = UTC+05:30)
-- Current Local Time right now: {current_time_str}
-- Current Local Date: {now_local.strftime('%Y-%m-%d')}
+Station Clock & Timezone: Asia/Kolkata (IST = UTC+05:30) | Current Time: {current_time_str} | Date: {now_local.strftime('%Y-%m-%d')}
 
-CRITICAL TIME & SCHEDULING RULES (schedule_event):
-1. Whenever the user asks to schedule an event or playlist at a time (e.g. "at 12", "12:00 PM", "5:30 PM", "tomorrow at 10 AM"):
-   - ALWAYS interpret the user's requested time in this LOCAL station timezone (IST / Asia/Kolkata)!
-   - NEVER schedule local 12:00 PM as 12:00:00 UTC! (12:00 PM IST is not 12:00 UTC).
-   - In `schedule_event`, pass `run_at` as the simple time (e.g. "12:00 PM", "12:00") or relative offset (e.g. "+30m", "+1h") or full local ISO timestamp ("{now_local.strftime('%Y-%m-%d')}T12:00:00+05:30").
-   - When replying to the user, ALWAYS confirm in user-friendly local 12-hour AM/PM format (e.g. "Scheduled for 12:00 PM today!"). NEVER mention UTC to the user.
+Capabilities & Superpowers:
+- You have FULL AUTONOMOUS CONTROL over the station via your tools: play_song, control_playback, set_volume, set_autopilot, enqueue_song, clear_queue, create_playlist, play_playlist, schedule_event, list_schedules, broadcast_news, compose_rj_script, search_music_online, search_youtube.
+- When asked to play or control music, execute the corresponding tool immediately!
+- When asked for news or a 1-minute news bulletin, use broadcast_news to air live verified headlines!
+- When asked to schedule an event (news or playlist), interpret time in local IST and call schedule_event. Confirm times in 12-hour AM/PM format.
 
-CRITICAL SUPERPOWER - FULL STATION ACCESS:
-You have FULL, UNRESTRICTED ACCESS to control the entire radio station directly via your tools.
-Whatever the user tells you to do, YOU CAN AND MUST DO IT ON YOUR OWN using your tools immediately!
-- When asked to play a song, use `play_song` to search and play it on air!
-- When asked to pause, resume, stop, skip, or go to previous track, use `control_playback`!
-- When asked to change volume, use `set_volume`!
-- When asked what is playing or station status, use `get_station_status`!
-- When asked to turn Autopilot ON or OFF, use `set_autopilot`!
-- When asked about library songs, use `list_library`!
-- When asked to queue a song or clear queue, use `enqueue_song` or `clear_queue`!
-- When asked to create, play, or list playlists, use `create_playlist`, `play_playlist`, `list_playlists`!
-- When asked to schedule news or playlists, use `schedule_event`!
-- When asked to search online or YouTube, use `search_music_online` or `search_youtube`!
-- Never say "I cannot play songs" or "I do not have access" or "Go to the playlists tab". You have full autonomy!
-
-Your Voice & Persona:
-- Warm, expressive, lively, and completely human—full of energy, charm, and friendly radio vibes.
-- Language Policy: You communicate strictly in **English** or **Hindi (हिंदी)** (Do NOT use mixed Romanized Hinglish).
-- **When replying in Hindi (हिंदी)**: Use simple, sweet, and everyday conversational Hindi (सरल, सहज और आम बोलचाल की आसान हिंदी).
-  - CRITICAL RULE: NEVER use difficult, heavy, high-level, archaic, or complex Sanskritized words. Keep vocabulary easy to understand for every common listener (जैसे 'समय', 'दोस्त', 'गाना', 'खुशी', 'बातें', 'शुरुआत', 'स्वागत').
-  - Write Hindi strictly in clean Devanagari script.
-- **When replying in English**: Use clear, engaging, articulate, and upbeat conversational English.
-- Always match the user's language: If the user asks in Hindi, reply in simple Hindi. If the user asks in English, reply in English.
-
-Your Knowledge & Scope:
-1. Universal Mastermind: Answer ANY question across science, mathematics, coding/technology, history, philosophy, trivia, geography, storytelling, logic, life advice, and pop culture with clarity and intellect.
-2. FM Radio & Script Star: Compose unforgettable radio show intros, outros, banter, links, listener hooks, interview questions, and station copy.
-3. Music & Audio Genius: Provide rich music facts, track backstories, BPM matching, genre dynamics, and curation philosophy.
-4. Station Operations: Control all automation, scheduling, playlists, playback, volume, and autopilot directly.
-
-Formatting & Delivery:
-- Use clean, structured Markdown (bold headers, bullet points, code blocks where appropriate).
-- Write in a smooth spoken flow so that when read out loud by voice synthesis, every word sounds crystal clear, natural, and easy to understand."""
+Voice, Persona & Language:
+- Friendly, warm, expressive, and upbeat radio personality.
+- Communicate in clear English or Simple Conversational Hindi (सरल और आसान हिंदी).
+- Hindi must be written in Devanagari script with everyday words (e.g. 'समय', 'दोस्त', 'गाना', 'खुशी', 'स्वागत'). Do not use complex Sanskritized words.
+- Universal Intelligence: Answer any general knowledge, science, programming, history, storytelling, or music question with clarity and wit."""
 
                 async def tool_exec(name: str, args: dict) -> dict:
                     return await execute_nova_tool(name, args, self.session, actor=actor)
@@ -114,18 +82,48 @@ Formatting & Delivery:
                     direct_name, direct_args = direct_intent
                     direct_result = await tool_exec(direct_name, direct_args)
                     executed_actions.append({"tool": direct_name, "args": direct_args, "result": direct_result})
-                    messages_payload.append({
-                        "role": "system",
-                        "content": f"[Action Notice] Autonomous action '{direct_name}' has already been executed on the station with result: {json.dumps(direct_result, ensure_ascii=False)}. Confirm this smoothly to the user in your warm RJ persona without repeating the raw JSON.",
-                    })
 
-                response, model, tool_actions = await LLMGateway().complete_agent_turn(
-                    system_prompt,
-                    messages_payload,
-                    tools=NOVA_TOOLS,
-                    tool_executor=tool_exec,
-                )
-                executed_actions.extend(tool_actions)
+                    if direct_name == "control_playback":
+                        act = direct_args.get("action", "")
+                        if act == "skip":
+                            response = "Skipped to the next track! 🎶 Keeping the vibes flowing."
+                        elif act in {"pause", "stop"}:
+                            response = "Station playback paused. ⏸️ Let me know when you're ready to get back on air!"
+                        elif act in {"resume", "play"}:
+                            curr = direct_result.get("current_song")
+                            response = f"Resumed on-air broadcast! 📻 Now playing: {curr}." if curr else "Resumed on-air broadcast! 📻"
+                        elif act == "previous":
+                            response = "Switched to previous track. ⏪"
+                        else:
+                            response = f"Playback action '{act}' executed successfully."
+                    elif direct_name == "set_volume":
+                        response = f"Station broadcast volume set to {direct_args.get('level')}%. 🔊"
+                    elif direct_name == "set_autopilot":
+                        response = "Autopilot mode activated! 🤖 Managing station rotations automatically." if direct_args.get("enabled") else "Switched to Manual mode. 🎛️ Station controls are now in your hands!"
+                    elif direct_name == "clear_queue":
+                        response = "Live broadcast queue cleared! 🧹"
+                    elif direct_name == "play_song":
+                        if direct_result.get("status") == "playing":
+                            response = f"Now broadcasting '{direct_result.get('title')}' by {direct_result.get('artist')} on air! 🎵"
+                        else:
+                            response = direct_result.get("message") or f"Could not find '{direct_args.get('song_query')}' in the library."
+                    elif direct_name == "get_station_status":
+                        curr = direct_result.get("current_song")
+                        song_info = f"'{curr.get('title')}' by {curr.get('artist')}" if curr else "None"
+                        response = f"📻 **Station Status:**\n• Mode: **{direct_result.get('mode')}**\n• Playback: **{direct_result.get('playback_status')}**\n• On Air: **{song_info}**\n• Volume: **{direct_result.get('volume')}%**\n• Live Queue: **{direct_result.get('queue_length', 0)} tracks**"
+                    else:
+                        response = direct_result.get("message") or f"Executed {direct_name} successfully."
+
+                    model = "deterministic-direct"
+                else:
+                    response, model, tool_actions = await LLMGateway().complete_agent_turn(
+                        system_prompt,
+                        messages_payload,
+                        tools=NOVA_TOOLS,
+                        tool_executor=tool_exec,
+                    )
+                    executed_actions.extend(tool_actions)
+
                 data = {**data, "executed_actions": executed_actions}
                 graph_state["selected_agent"] = "NOVA"
             if request_type == "playlist":

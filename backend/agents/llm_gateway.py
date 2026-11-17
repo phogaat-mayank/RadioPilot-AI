@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Callable, Coroutine
@@ -15,7 +16,6 @@ GROQ_FALLBACK_MODELS = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "qwen/qwen3.8-27b",
-    "groq/compound",
 ]
 
 
@@ -75,14 +75,17 @@ class LLMGateway:
                     turns = 0
                     while turns < max_turns:
                         turns += 1
-                        payload = {
+                        payload: dict[str, Any] = {
                             "model": model_name,
                             "messages": current_messages,
-                            "tools": tools,
-                            "tool_choice": "auto",
                             "temperature": 0.7,
-                            "max_tokens": 2048,
+                            "max_tokens": 384,
                         }
+                        # Pass tools on initial turn; on subsequent turns after tools ran, request concise conversational closure
+                        if turns == 1 and tools:
+                            payload["tools"] = tools
+                            payload["tool_choice"] = "auto"
+
                         response = await client.post(
                             "https://api.groq.com/openai/v1/chat/completions",
                             headers={
@@ -91,6 +94,10 @@ class LLMGateway:
                             },
                             json=payload,
                         )
+                        if response.status_code == 429:
+                            logger.warning("Groq model %s hit 429 TPM limit: %s", model_name, response.text[:200])
+                            await asyncio.sleep(1.0)
+                            break
                         if response.status_code != 200:
                             logger.warning("Groq model %s error %s: %s", model_name, response.status_code, response.text[:200])
                             break
@@ -168,7 +175,7 @@ class LLMGateway:
                             "model": model_name,
                             "messages": formatted_messages,
                             "temperature": 0.7,
-                            "max_tokens": 2048,
+                            "max_tokens": 384,
                         },
                     )
                     if response.status_code == 200:
@@ -178,6 +185,10 @@ class LLMGateway:
                             content = choices[0]["message"].get("content") or ""
                             if content.strip():
                                 return str(content), f"groq/{model_name}"
+                    elif response.status_code == 429:
+                        logger.warning("Groq model %s hit 429 TPM limit: %s", model_name, response.text[:200])
+                        await asyncio.sleep(1.0)
+                        continue
                     logger.warning("Groq model %s returned status %s: %s", model_name, response.status_code, response.text[:200])
                 except Exception as ex:
                     logger.warning("Groq call failed for model %s: %s", model_name, ex)
@@ -193,8 +204,8 @@ class LLMGateway:
         if "script" in latest or "intro" in latest:
             return "Here's a quick presenter link idea: 'Welcome back to RadioPilot! You are tuned into the freshest sound in town. Keep the energy high as we dive into our next track!'"
         if "news" in latest:
-            return "Hourly news bulletins can be generated automatically from verified sources. Click 'Hourly news' to prepare a broadcast-ready bulletin."
+            return "Live hourly news bulletins are generated from verified news feeds. Click 'Hourly news' or schedule a 1-minute bulletin on the station calendar!"
         if "schedule" in latest:
             return "You can schedule upcoming music shows, commercial breaks, and news bulletins directly in the Schedules & Automation workspace."
-        return "I am RJ AI, your radio co-host and universal assistant. I can answer any questions about general knowledge, science, music, show ideas, coding, or station operations."
+        return "I am NOVA (RJ AI), your live FM Radio Jockey co-host and universal assistant. I am right here and ready for your music requests, questions, or station controls!"
 

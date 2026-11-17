@@ -631,6 +631,7 @@ export default function AIConsole({ token }: Props) {
           model: "news-agent",
         };
         setMessages((prev) => [...prev, newsMsg]);
+        speak(newsMsg.id, announcement);
       } catch {
         // Best effort
       }
