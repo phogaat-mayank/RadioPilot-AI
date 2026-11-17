@@ -88,8 +88,9 @@ class StationScheduler:
             repo = RadioRepository(session)
             schedules = await repo.list_schedules(upcoming_only=True)
             for s in schedules:
-                if s.enabled and s.run_at >= now:
-                    self.register_schedule(s.id, s.event_type, s.playlist_id, s.run_at, s.metadata_json)
+                run_at_utc = s.run_at.astimezone(timezone.utc) if s.run_at.tzinfo else s.run_at.replace(tzinfo=timezone.utc)
+                if s.enabled and run_at_utc >= now:
+                    self.register_schedule(s.id, s.event_type, s.playlist_id, run_at_utc, s.metadata_json)
                     count += 1
         logger.info("Synchronized %d upcoming schedule(s) from database into scheduler", count)
         return count
@@ -121,6 +122,7 @@ async def _run_news(schedule_id: int, metadata: dict[str, Any]) -> None:
     from repositories.radio import RadioRepository
     from services.radio import RadioService
     from tools.news_tool import NewsTool
+    from websocket.manager import manager
     async with SessionLocal() as session:
         try:
             service = RadioService(session)
@@ -128,13 +130,14 @@ async def _run_news(schedule_id: int, metadata: dict[str, Any]) -> None:
             duration = int(metadata.get("duration_seconds", 60))
             mix = metadata.get("mix", ["headlines", "weather", "station"])
             bulletin = await NewsTool.automatic_bulletin(duration, mix if isinstance(mix, list) else None)
+            now_iso = datetime.now(timezone.utc).isoformat()
 
             schedule = await repo.get_schedule(schedule_id)
             if schedule:
                 schedule.metadata_json = {
                     **(schedule.metadata_json or {}),
                     **bulletin,
-                    "broadcast_at": datetime.now(timezone.utc).isoformat(),
+                    "broadcast_at": now_iso,
                 }
                 schedule.enabled = False
                 await session.commit()
@@ -143,6 +146,18 @@ async def _run_news(schedule_id: int, metadata: dict[str, Any]) -> None:
             if state.status == "playing":
                 await service.command("pause", actor="scheduler_news")
                 asyncio.create_task(_resume_after_news(duration))
+
+            # Broadcast WebSocket event so dashboards immediately trigger voice and display
+            try:
+                await manager.broadcast({
+                    "type": "news_bulletin",
+                    "bulletin": bulletin,
+                    "schedule_id": schedule_id,
+                    "broadcast_at": now_iso,
+                    "duration_seconds": duration,
+                })
+            except Exception:
+                pass
 
             await service.emit_state()
             logger.info("Scheduled news bulletin broadcasted and marked finished", extra={"schedule_id": schedule_id})

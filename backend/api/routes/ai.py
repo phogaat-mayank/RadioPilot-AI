@@ -211,12 +211,13 @@ async def on_air_news(session: SessionDep, _: UserDep) -> dict[str, object] | No
         except ValueError:
             continue
         duration = max(30, min(120, int(metadata.get("duration_seconds", 60))))
-        if broadcast_time - timedelta(seconds=10) <= now <= broadcast_time + timedelta(seconds=duration + 20):
+        if broadcast_time - timedelta(seconds=10) <= now <= broadcast_time + timedelta(seconds=duration + 60):
             return {
                 "schedule_id": schedule.id,
                 "broadcast_at": broadcast_time.isoformat(),
                 "duration_seconds": duration,
                 "bullets": [str(bullet) for bullet in bullets if str(bullet).strip()],
+                "script": str(metadata.get("script") or "\n".join(f"• {b}" for b in bullets)),
             }
     return None
 

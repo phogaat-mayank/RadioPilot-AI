@@ -119,6 +119,8 @@ export default function GlassAudioPlayer({
   useEffect(() => {
     if (currentSong?.duration_seconds) {
       setDuration(currentSong.duration_seconds);
+    } else {
+      setDuration(0);
     }
     setCurrentTime(0);
   }, [currentSong?.id, currentSong?.duration_seconds]);

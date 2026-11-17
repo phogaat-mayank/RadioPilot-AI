@@ -63,6 +63,14 @@ class RadioService:
         await self.log("playback", f"Cleared live queue ({count} items)", actor, {"cleared_count": count})
         return await self.emit_state()
 
+    async def clear_all(self, actor: str) -> PlaybackState:
+        """Stop playback, remove the active on-air track, and clear the entire playback queue."""
+        res = await playback_controller.clear_all()
+        self.session.add(PlaybackHistory(action="clear_all", performed_by=actor))
+        await self.session.commit()
+        await self.log("playback", f"Cleared all: stopped playback, cleared on-air track, and removed {res['queue_cleared']} queued items", actor, res)
+        return await self.emit_state()
+
     async def play(self, song_id: int | None, actor: str) -> PlaybackState:
         """Execute playback via the controller, never via an AI workflow."""
         song = await self._require_song(song_id) if song_id is not None else None
@@ -75,6 +83,8 @@ class RadioService:
 
     async def command(self, command: str, actor: str) -> PlaybackState:
         """Execute a safe named playback command."""
+        if command in {"clear_all", "clear-all"}:
+            return await self.clear_all(actor)
         actions = {"pause": playback_controller.pause, "resume": playback_controller.resume, "stop": playback_controller.stop, "skip": playback_controller.skip, "previous": playback_controller.previous}
         if command not in actions:
             raise ValueError("Unsupported playback command")

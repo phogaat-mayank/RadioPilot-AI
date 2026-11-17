@@ -33,6 +33,12 @@ async def clear_queue(session: SessionDep, user: UserDep) -> PlaybackState:
     return await RadioService(session).clear_queue(user.email)
 
 
+@router.post("/clear-all", response_model=PlaybackState)
+async def clear_all(session: SessionDep, user: UserDep) -> PlaybackState:
+    """Stop active playback, unload the current song, and clear the entire live queue."""
+    return await RadioService(session).clear_all(user.email)
+
+
 @router.post("/play", response_model=PlaybackState)
 async def play(session: SessionDep, user: UserDep, song_id: int | None = Query(default=None)) -> PlaybackState:
     """Start one requested song or the next queued song."""

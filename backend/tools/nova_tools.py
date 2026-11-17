@@ -475,6 +475,23 @@ NOVA_TOOLS: list[dict[str, Any]] = [
                 }
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_all",
+            "description": "Stop audio playback, remove the currently playing song from on-air broadcast, and clear all pending tracks from the live queue.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "include_schedules": {
+                        "type": "boolean",
+                        "description": "Whether to also delete past and pending schedules (default false)",
+                        "default": False
+                    }
+                }
+            }
+        }
     }
 ]
 
@@ -553,6 +570,10 @@ async def execute_nova_tool(
         "resume_playback": ("control_playback", {"action": "resume"}),
         "skip_track": ("control_playback", {"action": "skip"}),
         "get_news": "broadcast_news",
+        "clear_everything": "clear_all",
+        "reset_station": "clear_all",
+        "reset_queue": "clear_all",
+        "stop_and_clear": "clear_all",
     }
     if name in alias_map:
         mapped = alias_map[name]
@@ -884,8 +905,10 @@ async def execute_nova_tool(
 
         elif name in {"broadcast_news", "get_news"}:
             from tools.news_tool import NewsTool
+            from websocket.manager import manager
             duration = int(args.get("duration_seconds", 60))
             bulletin = await NewsTool.automatic_bulletin(duration)
+            now_iso = datetime.now(timezone.utc).isoformat()
 
             # Pause music playback during live news bulletin
             state = await radio_service.state()
@@ -895,11 +918,36 @@ async def execute_nova_tool(
                 import asyncio
                 asyncio.create_task(_resume_after_news(duration))
 
+            try:
+                await manager.broadcast({
+                    "type": "news_bulletin",
+                    "bulletin": bulletin,
+                    "broadcast_at": now_iso,
+                    "duration_seconds": duration,
+                })
+            except Exception:
+                pass
+
             return {
                 "status": "broadcasting",
                 "duration_seconds": duration,
                 "bulletin": bulletin,
-                "message": f"Broadcasting live 1-minute news bulletin:\n{bulletin.get('script')}",
+                "message": f"📢 **1-Minute On-Air News Bulletin:**\n\n{bulletin.get('script')}\n\n*Music paused for {duration} seconds.*",
+            }
+
+        elif name == "clear_all":
+            await radio_service.clear_all(actor)
+            include_sched = bool(args.get("include_schedules", False))
+            purged_schedules = 0
+            if include_sched:
+                purged_schedules = await radio_repo.delete_past_schedules()
+            return {
+                "status": "success",
+                "playback": "stopped",
+                "current_song": None,
+                "queue": "cleared",
+                "schedules_purged": purged_schedules,
+                "message": "Playback has been stopped, on-air song cleared, and the live queue emptied."
             }
 
         return {"status": "error", "message": f"Unknown tool '{name}'"}
@@ -948,9 +996,22 @@ def detect_direct_station_intent(prompt: str) -> tuple[str, dict[str, Any]] | No
         lvl = max(0, min(100, int(vol_match.group(1))))
         return ("set_volume", {"level": lvl})
 
-    # Clear queue
-    if p in {"clear queue", "clear live queue", "queue saaf karo", "क्यू साफ़ करो", "clr", "clear"}:
+    # Clear all (stop playback, remove active song, and clear live queue)
+    if p in {"clr", "clear", "clear all", "clear all songs", "clear everything", "stop and clear", "reset station", "clear all playback", "clear on air", "remove current song", "clear current song", "sab clear", "sab clear karo", "sab saaf karo", "sab kuch saaf karo", "सब साफ़ करो", "सब क्लियर करो", "सब कुछ साफ़ करो", "सब कुछ हटाओ", "गाना हटाओ", "करंट गाना हटाओ"} or any(phrase in p for phrase in ["clear all", "clear everything", "stop and clear", "sab clear", "sab saaf", "सब साफ़ करो", "सब क्लियर करो"]):
+        return ("clear_all", {})
+
+    # Clear queue only
+    if p in {"clear queue", "clear live queue", "queue saaf karo", "क्यू साफ़ करो"}:
         return ("clear_queue", {})
+
+    # 1-minute news bulletin
+    if any(phrase in p for phrase in [
+        "1 minute news", "1 min news", "minute news", "broadcast news",
+        "play news", "read news", "hourly news", "bulletin",
+        "khabar sunao", "samachar sunao", "news sunao", "1 minute ki news",
+        "ख़बर सुनाओ", "समाचार सुनाओ", "न्यूज़ सुनाओ"
+    ]):
+        return ("broadcast_news", {"duration_seconds": 60})
 
     # Station status
     if p in {"station status", "what is playing", "current song", "kya chal raha hai", "status", "क्या बज रहा है"}:
