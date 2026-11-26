@@ -128,19 +128,35 @@ async def _run_news(schedule_id: int, metadata: dict[str, Any]) -> None:
 
 
 async def _resume_after_news(duration_seconds: int) -> None:
-    """Resume queue or paused playback after a scheduled news bulletin completes."""
-    from playback.controller import playback_controller
-    await asyncio.sleep(duration_seconds)
-    await playback_controller.clear_news_broadcasting()
+    """Safety-net timer to resume queue playback if browser TTS completion event does not arrive."""
+    global _RESUME_TASK
+    try:
+        await asyncio.sleep(duration_seconds)
+    except asyncio.CancelledError:
+        return
+    _RESUME_TASK = None
     from database.session import SessionLocal
     from services.radio import RadioService
     async with SessionLocal() as session:
-        service = RadioService(session)
-        state = await service.state()
-        if state.status == "paused":
-            await service.command("resume", actor="scheduler_news")
-        elif state.status != "playing" and state.queue:
-            await service.play(None, actor="scheduler_news")
+        await RadioService(session).complete_news_broadcast(actor="scheduler_news")
+
+
+_RESUME_TASK: asyncio.Task[None] | None = None
+
+
+def schedule_news_resume(duration_seconds: int) -> None:
+    """Start a bounded safety-net timer that resumes playback after news."""
+    global _RESUME_TASK
+    cancel_news_resume()
+    _RESUME_TASK = asyncio.create_task(_resume_after_news(duration_seconds))
+
+
+def cancel_news_resume() -> None:
+    """Cancel the safety-net resume timer when NOVA finishes reading the news early."""
+    global _RESUME_TASK
+    if _RESUME_TASK and not _RESUME_TASK.done():
+        _RESUME_TASK.cancel()
+    _RESUME_TASK = None
 
 
 station_scheduler = StationScheduler()

@@ -3,9 +3,11 @@
 from datetime import datetime, timedelta, timezone
 import logging
 import re
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
+from pydantic import BaseModel
 from api.deps import SessionDep, UserDep
 from schemas.ai import AIDecisionUpdate, AIRequest, AIResponse, AIStatus
+from schemas.radio import PlaybackState
 from services.ai import AIService
 from services.radio import RadioService
 from repositories.radio import RadioRepository
@@ -200,6 +202,8 @@ async def on_air_news(session: SessionDep, _: UserDep) -> dict[str, object] | No
         if schedule.event_type != "news":
             continue
         metadata = dict(schedule.metadata_json or {})
+        if metadata.get("completed_at"):
+            continue
         broadcast_at = metadata.get("broadcast_at")
         bullets = metadata.get("bullets")
         if not isinstance(broadcast_at, str) or not isinstance(bullets, list):
@@ -219,6 +223,22 @@ async def on_air_news(session: SessionDep, _: UserDep) -> dict[str, object] | No
                 "bullets": [str(bullet) for bullet in bullets if str(bullet).strip()],
             }
     return None
+
+
+class NewsCompletedPayload(BaseModel):
+    """Optional identifier of the bulletin finished by voice synthesis."""
+    schedule_id: int | None = None
+
+
+@router.post("/news/completed", response_model=PlaybackState)
+async def complete_on_air_news(
+    session: SessionDep,
+    user: UserDep,
+    payload: NewsCompletedPayload | None = Body(default=None),
+) -> PlaybackState:
+    """Signal that NOVA finished reading the active news bulletin so playback resumes without dead air."""
+    schedule_id = payload.schedule_id if payload else None
+    return await RadioService(session).complete_news_broadcast(schedule_id=schedule_id, actor=user.email)
 
 
 @router.get("/history")

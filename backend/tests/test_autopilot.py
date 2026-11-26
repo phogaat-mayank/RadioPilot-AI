@@ -227,6 +227,14 @@ async def test_scheduled_news_waits_for_active_track_then_broadcasts_before_play
         assert "broadcast_at" in (updated_news.metadata_json or {})
         assert await playback_controller.is_news_broadcasting() is True
 
+        # As soon as NOVA voice finishes reading (~20s), complete_news_broadcast starts s_sched immediately without waiting 60s
+        resumed_state = await service.complete_news_broadcast(sched_news.id, actor="nova_voice")
+        assert resumed_state.status == "playing"
+        assert resumed_state.current_song is not None and resumed_state.current_song.id == s_sched.id
+        assert resumed_state.queue == []
+        assert "completed_at" in ((await repo.get_schedule(sched_news.id)).metadata_json or {})
+        assert await playback_controller.is_news_broadcasting() is False
+
     await playback_controller.clear_news_broadcasting()
     await playback_controller.clear_queue()
     await playback_controller.stop()

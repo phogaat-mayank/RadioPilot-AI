@@ -316,7 +316,8 @@ export default function AIConsole({ token }: Props) {
     id: string | number,
     rawMessage: string,
     onStart?: () => void,
-    onFailure?: () => void
+    onFailure?: () => void,
+    onEnd?: () => void
   ) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
       setNovaVoiceStatus("Speech synthesis not supported in this browser");
@@ -325,7 +326,10 @@ export default function AIConsole({ token }: Props) {
     }
 
     const spokenText = cleanForSpeech(rawMessage);
-    if (!spokenText) return;
+    if (!spokenText) {
+      onEnd?.();
+      return;
+    }
 
     window.speechSynthesis.cancel();
 
@@ -354,6 +358,7 @@ export default function AIConsole({ token }: Props) {
     utterance.onend = () => {
       setSpeakingId(null);
       setNovaVoiceStatus("NOVA voice ready (English / Hindi)");
+      onEnd?.();
     };
     utterance.onerror = () => {
       setSpeakingId(null);
@@ -622,7 +627,7 @@ export default function AIConsole({ token }: Props) {
         if (heardBulletinsRef.current.has(bulletinKey) || pendingBulletinsRef.current.has(bulletinKey)) return;
         pendingBulletinsRef.current.add(bulletinKey);
 
-        const announcement = `📢 **Hourly News Broadcast:**\n\n${bulletin.bullets.map((b) => `• ${b}`).join("\n")}`;
+        const announcement = `📢 **News Bulletin:**\n\n${bulletin.bullets.map((b) => `• ${b}`).join("\n")}`;
         const newsMsg: ChatMessage = {
           id: Date.now(),
           role: "assistant",
@@ -631,7 +636,28 @@ export default function AIConsole({ token }: Props) {
           model: "news-agent",
         };
         setMessages((prev) => [...prev, newsMsg]);
-        speak(newsMsg.id, announcement);
+
+        let finished = false;
+        const finishBulletin = () => {
+          if (finished) return;
+          finished = true;
+          heardBulletinsRef.current.add(bulletinKey);
+          pendingBulletinsRef.current.delete(bulletinKey);
+          void fetch(`${API}/ai/news/completed`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ schedule_id: bulletin.schedule_id }),
+          })
+            .then(() => {
+              window.dispatchEvent(new Event("station-refresh"));
+            })
+            .catch(() => undefined);
+        };
+
+        speak(newsMsg.id, announcement, undefined, finishBulletin, finishBulletin);
       } catch {
         // Best effort
       }

@@ -81,8 +81,6 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
   const [scheduleName, setScheduleName] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleType, setScheduleType] = useState<"playlist" | "news">("playlist");
-  const [newsPrepMinutes, setNewsPrepMinutes] = useState(10);
-  const [newsDuration, setNewsDuration] = useState(60);
 
   const load = async () => {
     try {
@@ -205,16 +203,16 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: scheduleName || (scheduleType === "news" ? "Autopilot news bulletin" : "Scheduled playlist"),
+          name: scheduleName || (scheduleType === "news" ? "News Bulletin" : "Scheduled playlist"),
           event_type: scheduleType,
           playlist_id: scheduleType === "playlist" ? Number(selectedPlaylist) : null,
           run_at: scheduledDt.toISOString(),
           enabled: true,
-          metadata_json: scheduleType === "news" ? { preparation_minutes: newsPrepMinutes, duration_seconds: newsDuration, mix: ["headlines", "weather", "station"] } : {},
+          metadata_json: scheduleType === "news" ? { mix: ["headlines", "weather", "station"] } : {},
         }),
       });
       const localFormatted = scheduledDt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-      setNotice(scheduleType === "news" ? `News will prepare ${newsPrepMinutes} minutes early and trigger at ${localFormatted}.` : `Playlist scheduled for ${localFormatted}.`);
+      setNotice(scheduleType === "news" ? `News Bulletin scheduled for ${localFormatted}.` : `Playlist scheduled for ${localFormatted}.`);
       setScheduleName("");
       setScheduleTime("");
       await load();
@@ -421,7 +419,7 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
           onChange={val => setScheduleType(val)}
           options={[
             { value: "playlist", label: "Playlist" },
-            { value: "news", label: "1-minute news bulletin" },
+            { value: "news", label: "News Bulletin" },
           ]}
         />
         <input
@@ -435,7 +433,7 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
           onChange={(val) => setScheduleTime(val)}
           placeholder="Choose airtime and date"
         />
-        {scheduleType === "playlist" ? (
+        {scheduleType === "playlist" && (
           <GlassSelect
             value={selectedPlaylist}
             onChange={val => setSelectedPlaylist(val)}
@@ -445,40 +443,12 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
               label: playlist.name,
             }))}
           />
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="text-xs text-slate-400 font-medium">Prepare early</label>
-              <GlassSelect<number>
-                value={newsPrepMinutes}
-                onChange={val => setNewsPrepMinutes(val)}
-                options={[
-                  { value: 5, label: "5 minutes" },
-                  { value: 10, label: "10 minutes" },
-                  { value: 15, label: "15 minutes" },
-                  { value: 30, label: "30 minutes" },
-                ]}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-400 font-medium">Bulletin length</label>
-              <GlassSelect<number>
-                value={newsDuration}
-                onChange={val => setNewsDuration(val)}
-                options={[
-                  { value: 45, label: "45 seconds" },
-                  { value: 60, label: "1 minute" },
-                  { value: 90, label: "90 seconds" },
-                ]}
-              />
-            </div>
-          </div>
         )}
         <button className="rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] px-4 py-2.5 text-sm font-bold text-[#032023] shadow-md shadow-[#00CEC8]/25 transition">
-          Schedule {scheduleType === "news" ? "news" : "playlist"}
+          Schedule {scheduleType === "news" ? "News Bulletin" : "playlist"}
         </button>
       </form>
-      <p className="muted text-xs">News preparation mixes verified headlines with weather and station updates. Prepared automatically before airtime.</p>
+      <p className="muted text-xs">News Bulletin mixes verified headlines with weather and station updates automatically.</p>
 
       <div className="flex items-center justify-between border-t border-white/10 pt-3 text-xs">
         <span className="font-semibold text-white">Upcoming Broadcasts ({upcomingSchedules.length})</span>

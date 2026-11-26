@@ -261,12 +261,14 @@ class RadioService:
         duration: int,
         actor: str,
     ) -> None:
-        """Mark news active on air and schedule queue resumption after bulletin duration."""
-        from scheduler.service import _resume_after_news
+        """Mark news active on air and schedule bounded fallback resumption after bulletin duration."""
+        from scheduler.service import schedule_news_resume
 
         if schedule is not None:
+            meta = dict(metadata)
+            meta.pop("completed_at", None)
             schedule.metadata_json = {
-                **metadata,
+                **meta,
                 "duration_seconds": duration,
                 "broadcast_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -274,13 +276,47 @@ class RadioService:
             await self.session.commit()
 
         await playback_controller.set_news_broadcasting(duration)
-        asyncio.create_task(_resume_after_news(duration))
+        schedule_news_resume(duration)
         await self.log(
             "news",
-            f"Scheduled news bulletin broadcasting ({duration}s)",
+            f"Scheduled news bulletin broadcasting ({duration}s max window)",
             actor,
             {"schedule_id": schedule.id if schedule else None, "duration_seconds": duration},
         )
+
+    async def complete_news_broadcast(self, schedule_id: int | None = None, actor: str = "nova_voice") -> PlaybackState:
+        """End the active news window immediately once NOVA finishes reading, then play next track."""
+        from scheduler.service import cancel_news_resume
+
+        cancel_news_resume()
+        await playback_controller.clear_news_broadcasting()
+
+        if schedule_id is not None:
+            schedule = await self.repository.get_schedule(schedule_id)
+            if schedule is not None:
+                meta = dict(schedule.metadata_json or {})
+                if not meta.get("completed_at"):
+                    meta["completed_at"] = datetime.now(timezone.utc).isoformat()
+                    schedule.metadata_json = meta
+                    schedule.enabled = False
+                    await self.session.commit()
+
+        state = await self.state()
+        if state.status == "paused":
+            await playback_controller.resume()
+            self.session.add(PlaybackHistory(action="resume", performed_by=actor))
+            await self.session.commit()
+            await self.log("news", "News bulletin finished; playback resumed", actor, {"schedule_id": schedule_id})
+        elif state.status != "playing" and state.queue:
+            await playback_controller.play(None)
+            current = (await playback_controller.state())["current_song"]
+            self.session.add(PlaybackHistory(song_id=current.id if current else None, action="play", performed_by=actor))
+            await self.session.commit()
+            await self.log("news", "News bulletin finished; next track started", actor, {"schedule_id": schedule_id})
+        else:
+            await self.log("news", "News bulletin finished", actor, {"schedule_id": schedule_id})
+
+        return await self.emit_state()
 
     @staticmethod
     async def _watch_track_end_for_news(schedule_id: int, expected_revision: int, wait_seconds: float) -> None:
