@@ -21,6 +21,7 @@ import {
 import AIConsole from "../components/AIConsole";
 import GlassAudioPlayer from "../components/GlassAudioPlayer";
 import OperationsWorkspace from "../components/OperationsWorkspace";
+import StationClock from "../components/StationClock";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 type Song = { id: number; title: string; artist: string; duration_seconds: number; file_path: string };
@@ -439,8 +440,9 @@ export default function Home() {
             </button>
           </nav>
 
-          {/* Right: Operator Profile Capsule */}
-          <div className="flex items-center gap-2.5">
+          {/* Right: Studio Broadcast Clock & Operator Profile Capsule */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <StationClock />
             <div className="glass-capsule-bar flex items-center gap-2 px-3 py-1.5 text-xs">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#EB4203] opacity-75"></span>
