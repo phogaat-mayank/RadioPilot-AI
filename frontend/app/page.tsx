@@ -36,8 +36,9 @@ type Station = {
 
 function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return "";
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
@@ -657,19 +658,29 @@ export default function Home() {
             </div>
             {station?.queue.length ? (
               <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                {station.queue.map((song, i) => (
-                  <div
-                    key={`${song.id}-${song.title}`}
-                    className="glass-subcard liquid-queue-item flex items-center gap-3 px-3.5 py-2.5 text-xs"
-                    style={{ animationDelay: `${i * 35}ms` }}
-                  >
-                    <span className="w-5 text-center font-mono font-bold text-[#00CEC8]">{i + 1}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-slate-200">{song.title}</p>
-                      <p className="truncate text-[11px] text-slate-400">{song.artist}</p>
+                {station.queue.map((song, i) => {
+                  const qDur = formatDuration(song.duration_seconds);
+                  return (
+                    <div
+                      key={`${song.id}-${song.title}`}
+                      className="glass-subcard liquid-queue-item flex items-center gap-3 px-3.5 py-2.5 text-xs"
+                      style={{ animationDelay: `${i * 35}ms` }}
+                    >
+                      <span className="w-5 text-center font-mono font-bold text-[#00CEC8]">{i + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium text-slate-200">{song.title}</p>
+                          {qDur && (
+                            <span className="shrink-0 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-[#00CEC8]">
+                              {qDur}
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-[11px] text-slate-400">{song.artist}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="muted text-sm">Add a song from the library to begin.</p>
@@ -760,13 +771,17 @@ export default function Home() {
                       className="min-w-0 flex-1 text-left"
                       title={`Click to queue ${song.title}`}
                     >
-                      <p className="truncate text-xs font-medium text-slate-200 group-hover:text-[#00CEC8] transition">
-                        {song.title}
-                      </p>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                        <span className="truncate">{song.artist}</span>
-                        {duration && <span className="shrink-0 text-[10px] text-slate-500">{duration}</span>}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="truncate text-xs font-medium text-slate-200 group-hover:text-[#00CEC8] transition">
+                          {song.title}
+                        </p>
+                        {duration && (
+                          <span className="shrink-0 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-[#00CEC8]">
+                            {duration}
+                          </span>
+                        )}
                       </div>
+                      <p className="truncate text-[11px] text-slate-400">{song.artist}</p>
                     </button>
                     <div className="flex items-center gap-1 shrink-0">
                       <button

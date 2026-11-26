@@ -6,8 +6,16 @@ import GlassSelect from "./GlassSelect";
 import GlassDateTimePicker from "./GlassDateTimePicker";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
-type Song = { id: number; title: string; artist: string };
+type Song = { id: number; title: string; artist: string; duration_seconds?: number };
 type Playlist = { id: number; name: string; description?: string };
+
+function formatDuration(seconds?: number): string {
+  if (!seconds || seconds <= 0) return "";
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
 type PlaylistDetail = Playlist & { songs: Song[] };
 type Schedule = { id: number; name: string; event_type: string; playlist_id?: number; run_at: string; enabled: boolean };
 type Props = {
@@ -265,7 +273,78 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
         </button>
       </div>
     )}
-    {tab === "library" && <div className="mt-5 space-y-4"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><Upload size={18} className="text-[#00CEC8]"/><h2 className="font-bold text-white">Upload music</h2></div>{songs.length > 0 && <button type="button" onClick={() => void deleteAllSongs()} className="flex items-center gap-1.5 rounded-lg border border-rose-500/25 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/25"><Trash2 size={13}/> Delete all songs</button>}</div><form onSubmit={submitUpload} className="space-y-3"><label className="block cursor-pointer rounded-2xl border-2 border-dashed border-[#00CEC8]/40 bg-[#00CEC8]/5 backdrop-blur-md p-6 text-center transition hover:border-[#00CEC8]/70 hover:bg-[#00CEC8]/10"><Upload className="mx-auto mb-2 text-[#00CEC8]" size={28}/><span className="block font-semibold text-slate-100">Choose multiple music files</span><span className="muted mt-1 block text-xs">MP3, WAV, OGG, M4A or FLAC · Select up to 50 songs</span><input type="file" multiple accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/flac,.mp3,.wav,.ogg,.m4a,.aac,.flac" onChange={selectFiles} className="sr-only"/></label>{uploads.length > 0 && <p className="text-xs text-[#00CEC8] font-medium">{uploads.length} file(s) selected: {uploads.slice(0, 3).map(file => file.name).join(", ")}{uploads.length > 3 ? "…" : ""}</p>}<button className="rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] px-4 py-2.5 text-sm font-bold text-[#032023] shadow-md shadow-[#00CEC8]/25 transition">Upload selected songs</button></form><div className="flex items-center justify-between text-xs"><p className="muted">Song title and artist are detected automatically.</p>{songs.length > 0 && <span className="muted font-medium">{songs.length} song(s)</span>}</div><div className="max-h-56 space-y-2 overflow-auto pr-1">{songs.length ? songs.map(song => <div key={song.id} className="glass-subcard flex items-center justify-between p-2.5 text-xs"><span><b className="text-white">{song.title}</b> <span className="muted">— {song.artist}</span></span><button onClick={() => void deleteSong(song)} aria-label={`Delete ${song.title}`} className="rounded-lg p-1 text-rose-300 hover:bg-rose-500/20"><Trash2 size={15}/></button></div>) : <p className="muted py-2 text-center text-xs">Library has no songs.</p>}</div></div>}
+    {tab === "library" && (
+      <div className="mt-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Upload size={18} className="text-[#00CEC8]" />
+            <h2 className="font-bold text-white">Upload music</h2>
+          </div>
+          {songs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void deleteAllSongs()}
+              className="flex items-center gap-1.5 rounded-lg border border-rose-500/25 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/25"
+            >
+              <Trash2 size={13} /> Delete all songs
+            </button>
+          )}
+        </div>
+        <form onSubmit={submitUpload} className="space-y-3">
+          <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-[#00CEC8]/40 bg-[#00CEC8]/5 backdrop-blur-md p-6 text-center transition hover:border-[#00CEC8]/70 hover:bg-[#00CEC8]/10">
+            <Upload className="mx-auto mb-2 text-[#00CEC8]" size={28} />
+            <span className="block font-semibold text-slate-100">Choose multiple music files</span>
+            <span className="muted mt-1 block text-xs">MP3, WAV, OGG, M4A or FLAC · Select up to 50 songs</span>
+            <input
+              type="file"
+              multiple
+              accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/flac,.mp3,.wav,.ogg,.m4a,.aac,.flac"
+              onChange={selectFiles}
+              className="sr-only"
+            />
+          </label>
+          {uploads.length > 0 && (
+            <p className="text-xs text-[#00CEC8] font-medium">
+              {uploads.length} file(s) selected: {uploads.slice(0, 3).map(file => file.name).join(", ")}
+              {uploads.length > 3 ? "…" : ""}
+            </p>
+          )}
+          <button className="rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] px-4 py-2.5 text-sm font-bold text-[#032023] shadow-md shadow-[#00CEC8]/25 transition">
+            Upload selected songs
+          </button>
+        </form>
+        <div className="flex items-center justify-between text-xs">
+          <p className="muted">Song title and artist are detected automatically.</p>
+          {songs.length > 0 && <span className="muted font-medium">{songs.length} song(s)</span>}
+        </div>
+        <div className="max-h-56 space-y-2 overflow-auto pr-1">
+          {songs.length ? songs.map(song => {
+            const duration = formatDuration(song.duration_seconds);
+            return (
+              <div key={song.id} className="glass-subcard flex items-center justify-between gap-2 p-2.5 text-xs">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="min-w-0 truncate">
+                    <b className="text-white">{song.title}</b> <span className="muted">— {song.artist}</span>
+                  </span>
+                  {duration && (
+                    <span className="shrink-0 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-[#00CEC8]">
+                      {duration}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => void deleteSong(song)}
+                  aria-label={`Delete ${song.title}`}
+                  className="shrink-0 rounded-lg p-1 text-rose-300 hover:bg-rose-500/20"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            );
+          }) : <p className="muted py-2 text-center text-xs">Library has no songs.</p>}
+        </div>
+      </div>
+    )}
     {tab === "playlists" && <div className="mt-5 space-y-4">
       <div className="flex items-center gap-2"><Music2 size={18} className="text-[#FF9C5F]"/><h2 className="font-bold text-white">Playlists</h2></div>
       <form onSubmit={createPlaylist} className="flex gap-2">
@@ -307,10 +386,13 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
           value={selectedSong}
           onChange={val => setSelectedSong(val)}
           placeholder="Choose library song"
-          options={songs.map(song => ({
-            value: String(song.id),
-            label: `${song.title} — ${song.artist}`,
-          }))}
+          options={songs.map(song => {
+            const dur = formatDuration(song.duration_seconds);
+            return {
+              value: String(song.id),
+              label: dur ? `${song.title} — ${song.artist} (${dur})` : `${song.title} — ${song.artist}`,
+            };
+          })}
         />
       </div>
       <button onClick={addSong} className="flex items-center gap-2 rounded-xl bg-[#00CEC8] hover:bg-[#00b5af] px-4 py-2.5 text-sm font-bold text-[#032023] shadow-md shadow-[#00CEC8]/30 transition hover:scale-[1.02] active:scale-[0.98]">
@@ -319,9 +401,15 @@ export default function OperationsWorkspace({ token, songs, refresh, activeTab, 
       {openedPlaylist && (
         <div className="glass-subcard p-4">
           <p className="mb-2 text-sm font-semibold text-white">{openedPlaylist.name} · {openedPlaylist.songs.length} songs</p>
-          {openedPlaylist.songs.length ? openedPlaylist.songs.map((song, index) => (
-            <p key={song.id} className="muted py-1 text-xs">{index + 1}. {song.title} — {song.artist}</p>
-          )) : <p className="muted text-xs">This playlist has no songs yet.</p>}
+          {openedPlaylist.songs.length ? openedPlaylist.songs.map((song, index) => {
+            const dur = formatDuration(song.duration_seconds);
+            return (
+              <p key={song.id} className="muted flex items-center justify-between gap-2 py-1 text-xs">
+                <span className="truncate">{index + 1}. {song.title} — {song.artist}</span>
+                {dur && <span className="shrink-0 font-mono text-[10px] text-[#00CEC8]">{dur}</span>}
+              </p>
+            );
+          }) : <p className="muted text-xs">This playlist has no songs yet.</p>}
         </div>
       )}
     </div>}

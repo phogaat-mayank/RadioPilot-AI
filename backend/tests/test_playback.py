@@ -101,3 +101,29 @@ async def test_repository_duplicate_song_detection() -> None:
         assert non_dup is None
 
     await engine.dispose()
+
+
+def test_detect_audio_duration(tmp_path) -> None:
+    """Detect duration accurately for WAV, MP3 (Xing and raw MPEG frames), and safely fall back to 0."""
+    import struct
+    import wave
+    from api.routes.library import detect_audio_duration
+
+    wav_path = tmp_path / "sample.wav"
+    with wave.open(str(wav_path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(8000)
+        wf.writeframes(b"\x00\x00" * 16000)
+    assert detect_audio_duration(wav_path) == 2.0
+
+    # Minimal MPEG1 Layer III 128kbps 44100Hz frame (417 bytes per 1152 samples)
+    frame_hdr = struct.pack(">I", 0xFFFB9000)
+    mp3_frame = frame_hdr + b"\x00" * (417 - 4)
+    mp3_path = tmp_path / "sample.mp3"
+    mp3_path.write_bytes(mp3_frame * 38)  # 38 * 1152 / 44100 ~= 0.99s
+    assert 0.95 <= detect_audio_duration(mp3_path) <= 1.05
+
+    bad_path = tmp_path / "broken.mp3"
+    bad_path.write_bytes(b"not valid audio data")
+    assert detect_audio_duration(bad_path) == 0.0
