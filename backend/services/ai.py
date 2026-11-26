@@ -8,7 +8,7 @@ import json
 from time import perf_counter
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.llm_gateway import LLMGateway
+from agents.llm_gateway import LLMGateway, strip_tool_markup
 from graphs.radio_graph import radio_graph
 from models.entities import AIConversation, AIDecision, AILog, AITask, StationMode
 from repositories.ai import AIRepository
@@ -44,7 +44,11 @@ class AIService:
             model = "deterministic"
             if request_type == "chat":
                 history = await self.repository.recent_messages(payload.session_id, limit=6)
-                messages_payload = [{"role": msg.role, "content": msg.content} for msg in history]
+                messages_payload = []
+                for msg in history:
+                    clean_hist = strip_tool_markup(msg.content) if msg.role == "assistant" else msg.content
+                    if clean_hist.strip():
+                        messages_payload.append({"role": msg.role, "content": clean_hist})
                 if not any(m["role"] == "user" and m["content"] == payload.prompt for m in messages_payload):
                     messages_payload.append({"role": "user", "content": payload.prompt})
 
@@ -62,10 +66,11 @@ class AIService:
 Station Clock & Timezone: Asia/Kolkata (IST = UTC+05:30) | Current Time: {current_time_str} | Date: {now_local.strftime('%Y-%m-%d')}
 
 Capabilities & Superpowers:
-- You have FULL AUTONOMOUS CONTROL over the station via your tools: play_song, control_playback, set_volume, set_autopilot, enqueue_song, clear_queue, create_playlist, play_playlist, schedule_event, list_schedules, broadcast_news, compose_rj_script, search_music_online, search_youtube.
-- When asked to play or control music, execute the corresponding tool immediately!
+- You have FULL AUTONOMOUS CONTROL over the station via your tools: play_song, control_playback, set_volume, set_autopilot, list_library, enqueue_song, clear_queue, list_playlists, get_playlist, create_playlist, play_playlist, add_song_to_playlist, schedule_event, list_schedules, broadcast_news, compose_rj_script, search_music_online, search_youtube.
+- When asked to add all songs by an artist or multiple tracks to a playlist, use `add_song_to_playlist` with `add_all=true` (or `song_queries`) in a single call.
 - When asked for news or a 1-minute news bulletin, use broadcast_news to air live verified headlines!
 - When asked to schedule an event (news or playlist), interpret time in local IST and call schedule_event. Confirm times in 12-hour AM/PM format.
+- NEVER output raw `<tool_call>`, `<function=...>`, `<parameter=...>`, or XML/JSON markup in your message to the user. Always respond clearly in natural conversational language.
 
 Voice, Persona & Language:
 - Friendly, warm, expressive, and upbeat radio personality.
@@ -185,7 +190,13 @@ Voice, Persona & Language:
     async def chat_history(self, session_id: str, limit: int = 40) -> list[dict]:
         """Return serialized chat messages for a given session."""
         messages = await self.repository.recent_messages(session_id, limit=limit)
-        return [{"id": msg.id, "role": msg.role, "content": msg.content, "created_at": msg.created_at.isoformat()} for msg in messages]
+        out = []
+        for msg in messages:
+            text = strip_tool_markup(msg.content) if msg.role == "assistant" else msg.content
+            if msg.role == "assistant" and not text:
+                text = "Completed the requested station task."
+            out.append({"id": msg.id, "role": msg.role, "content": text, "created_at": msg.created_at.isoformat()})
+        return out
 
     async def clear_chat(self, session_id: str) -> int:
         """Clear conversation history for a given session."""

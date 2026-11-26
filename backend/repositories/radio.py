@@ -82,11 +82,22 @@ class RadioRepository:
 
     async def list_playlists(self) -> Sequence[Playlist]:
         """List playlists with preloaded items and songs."""
-        return (await self.session.scalars(select(Playlist).options(selectinload(Playlist.items).selectinload(PlaylistSong.song)).order_by(Playlist.name))).all()
+        statement = (
+            select(Playlist)
+            .options(selectinload(Playlist.items).selectinload(PlaylistSong.song))
+            .order_by(Playlist.name)
+            .execution_options(populate_existing=True)
+        )
+        return (await self.session.scalars(statement)).all()
 
     async def get_playlist(self, playlist_id: int) -> Playlist | None:
         """Fetch a playlist and its ordered audio assets."""
-        statement = select(Playlist).options(selectinload(Playlist.items).selectinload(PlaylistSong.song)).where(Playlist.id == playlist_id)
+        statement = (
+            select(Playlist)
+            .options(selectinload(Playlist.items).selectinload(PlaylistSong.song))
+            .where(Playlist.id == playlist_id)
+            .execution_options(populate_existing=True)
+        )
         return await self.session.scalar(statement)
 
     async def add_playlist(self, playlist: Playlist) -> Playlist:

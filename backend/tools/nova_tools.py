@@ -80,30 +80,43 @@ def clean_search_term(term: str) -> str:
     return re.sub(r"[^a-zA-Z0-9\s]", " ", t).strip()
 
 
-def find_matching_song(query: str, songs: list[Song]) -> Song | None:
-    """Find the best matching song in the library by id, title, or artist."""
+def find_matching_songs(query: str, songs: list[Song]) -> list[Song]:
+    """Find all matching songs in the library by id, title, or artist."""
     q_str = str(query).strip()
     if not q_str:
-        return None
+        return []
 
-    # Match exact ID
     if q_str.isdigit():
         q_id = int(q_str)
-        for s in songs:
-            if s.id == q_id:
-                return s
+        return [s for s in songs if s.id == q_id]
 
     cleaned_q = clean_search_term(q_str)
     tokens = [tok for tok in cleaned_q.split() if len(tok) >= 2]
 
-    # Exact lowercase substring match
-    for s in songs:
-        t_clean = s.title.lower()
-        a_clean = s.artist.lower()
-        if cleaned_q and (cleaned_q in t_clean or cleaned_q in a_clean):
-            return s
+    substring_matches = [
+        s for s in songs
+        if cleaned_q and (cleaned_q in s.title.lower() or cleaned_q in s.artist.lower())
+    ]
+    if substring_matches:
+        return substring_matches
 
-    # Token overlap match
+    if tokens:
+        return [
+            s for s in songs
+            if all(tok in f"{s.title} {s.artist}".lower() for tok in tokens)
+        ]
+
+    return []
+
+
+def find_matching_song(query: str, songs: list[Song]) -> Song | None:
+    """Find the best matching song in the library by id, title, or artist."""
+    matches = find_matching_songs(query, songs)
+    if matches:
+        return matches[0]
+
+    cleaned_q = clean_search_term(str(query).strip())
+    tokens = [tok for tok in cleaned_q.split() if len(tok) >= 2]
     if tokens:
         best_song = None
         best_score = 0
@@ -325,7 +338,7 @@ NOVA_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "add_song_to_playlist",
-            "description": "Add a library song to an existing playlist.",
+            "description": "Add one or multiple library songs (or all songs matching an artist/query when add_all=true) to an existing playlist.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -335,10 +348,19 @@ NOVA_TOOLS: list[dict[str, Any]] = [
                     },
                     "song_query": {
                         "type": "string",
-                        "description": "Title, artist, or ID of the song to add"
+                        "description": "Title, artist, or ID of the song (or artist filter when add_all=true)"
+                    },
+                    "song_queries": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of multiple song titles, artists, or IDs to add in one batch"
+                    },
+                    "add_all": {
+                        "type": "boolean",
+                        "description": "Set to true when adding ALL songs matching song_query (e.g. all songs by an artist) in one call"
                     }
                 },
-                "required": ["playlist_name_or_id", "song_query"]
+                "required": ["playlist_name_or_id"]
             }
         }
     },
@@ -534,6 +556,21 @@ def parse_schedule_time(run_at_str: str, tz_name: str = "Asia/Kolkata") -> datet
     return (now_local + timedelta(minutes=10)).astimezone(timezone.utc)
 
 
+def _find_matching_playlist(query: str, playlists: list[Any]) -> Any | None:
+    """Resolve a playlist cleanly by numeric ID, exact name match, or substring match."""
+    q = query.strip()
+    if not q:
+        return None
+    if q.isdigit():
+        q_id = int(q)
+        return next((p for p in playlists if p.id == q_id), None)
+    q_low = q.lower()
+    exact = next((p for p in playlists if p.name.strip().lower() == q_low), None)
+    if exact:
+        return exact
+    return next((p for p in playlists if q_low in p.name.lower()), None)
+
+
 async def execute_nova_tool(
     name: str,
     args: dict[str, Any],
@@ -674,14 +711,8 @@ async def execute_nova_tool(
         elif name == "get_playlist":
             query = str(args.get("playlist_name_or_id", "")).strip()
             playlists = list(await radio_repo.list_playlists())
-            target = None
-            if query.isdigit():
-                target = await radio_repo.get_playlist(int(query))
-            else:
-                for p in playlists:
-                    if query.lower() in p.name.lower():
-                        target = await radio_repo.get_playlist(p.id)
-                        break
+            matched = _find_matching_playlist(query, playlists)
+            target = await radio_repo.get_playlist(matched.id) if matched else None
             if not target:
                 return {"status": "not_found", "message": f"Playlist '{query}' not found."}
             return {
@@ -752,29 +783,62 @@ async def execute_nova_tool(
         elif name == "add_song_to_playlist":
             pl_query = str(args.get("playlist_name_or_id", "")).strip()
             song_query = str(args.get("song_query", "")).strip()
+            song_queries = args.get("song_queries") or []
+            add_all = bool(args.get("add_all", False))
+
             playlists = list(await radio_repo.list_playlists())
-            target_pl = None
-            if pl_query.isdigit():
-                target_pl = await radio_repo.get_playlist(int(pl_query))
-            else:
-                for p in playlists:
-                    if pl_query.lower() in p.name.lower():
-                        target_pl = await radio_repo.get_playlist(p.id)
-                        break
+            matched_pl = _find_matching_playlist(pl_query, playlists)
+            target_pl = await radio_repo.get_playlist(matched_pl.id) if matched_pl else None
             if not target_pl:
                 return {"status": "not_found", "message": f"Playlist '{pl_query}' not found."}
 
             library = list(await radio_repo.list_songs())
-            song = find_matching_song(song_query, library)
-            if not song:
-                return {"status": "not_found", "message": f"Song '{song_query}' not found in library."}
+            songs_to_add: list[Song] = []
+            seen_ids: set[int] = set()
 
-            await radio_repo.add_to_playlist(target_pl, song)
+            queries_list = [str(sq).strip() for sq in song_queries if str(sq).strip()] if isinstance(song_queries, list) else []
+            if song_query and song_query not in queries_list:
+                queries_list.append(song_query)
+
+            for q_item in queries_list:
+                matches = find_matching_songs(q_item, library) if (add_all or not song_queries) else []
+                if add_all:
+                    for m in matches:
+                        if m.id not in seen_ids:
+                            seen_ids.add(m.id)
+                            songs_to_add.append(m)
+                else:
+                    single = find_matching_song(q_item, library)
+                    if single and single.id not in seen_ids:
+                        seen_ids.add(single.id)
+                        songs_to_add.append(single)
+
+            if not songs_to_add:
+                return {"status": "not_found", "message": f"No songs matching '{song_query or pl_query}' found in library."}
+
+            existing_ids = {item.song_id for item in target_pl.items}
+            added_titles: list[str] = []
+            already_present: list[str] = []
+            for s in songs_to_add:
+                await radio_repo.add_to_playlist(target_pl, s)
+                if s.id in existing_ids:
+                    already_present.append(s.title)
+                else:
+                    existing_ids.add(s.id)
+                    added_titles.append(s.title)
+
+            await radio_service.emit_state()
+            if added_titles:
+                msg = f"Added {len(added_titles)} song(s) to playlist '{target_pl.name}': {', '.join(added_titles)}."
+            else:
+                msg = f"All matching songs ({len(already_present)}) are already in playlist '{target_pl.name}'."
             return {
                 "status": "added",
                 "playlist": target_pl.name,
-                "song": song.title,
-                "message": f"Added '{song.title}' to playlist '{target_pl.name}'.",
+                "song": added_titles[0] if len(added_titles) == 1 else None,
+                "added_songs": added_titles,
+                "already_in_playlist": already_present,
+                "message": msg,
             }
 
         elif name == "schedule_event":
