@@ -114,3 +114,120 @@ async def test_state_manager_restores_persisted_snapshot(tmp_path) -> None:
     restored = await StateManager(persistence_path=path).restore()
     assert restored.autopilot_enabled is True
     assert restored.current_mode == "AUTOPILOT"
+
+
+@pytest.mark.asyncio
+async def test_scheduled_playlist_waits_for_active_track_before_playing() -> None:
+    """Scheduled playlist completes current track first and then plays next."""
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from models.entities import Base, Playlist, Schedule, Song
+    from playback.controller import playback_controller
+    from repositories.radio import RadioRepository
+    from services.radio import RadioService
+
+    await playback_controller.clear_queue()
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        repo = RadioRepository(session)
+        s_now = await repo.add_song(Song(title="Now Playing", artist="Artist 1", file_path="/tmp/now.mp3", duration_seconds=180))
+        s_old_q = await repo.add_song(Song(title="Old Queued", artist="Artist 2", file_path="/tmp/old.mp3", duration_seconds=180))
+        s_sched = await repo.add_song(Song(title="Scheduled Song", artist="Artist 3", file_path="/tmp/sched.mp3", duration_seconds=180))
+
+        pl = await repo.add_playlist(Playlist(name="Evening Show"))
+        await repo.add_to_playlist(pl, s_sched)
+        sched = await repo.add_schedule(
+            Schedule(name="Evening Show", event_type="playlist", playlist_id=pl.id, run_at=datetime.now(timezone.utc), enabled=True)
+        )
+
+        service = RadioService(session)
+        await service.play(s_now.id, "tester")
+        await service.enqueue_song(s_old_q.id, "tester")
+        before = await service.state()
+        rev_before = before.playback_revision
+
+        # Trigger scheduled playlist while s_now is playing: must NOT interrupt s_now
+        after_trigger = await service.run_scheduled_playlist(sched.id, pl.id, actor="scheduler")
+        assert after_trigger.current_song is not None
+        assert after_trigger.current_song.id == s_now.id
+        assert [q.id for q in after_trigger.queue] == [s_sched.id, s_old_q.id]
+
+        # Complete s_now -> s_sched plays next
+        after_end = await service.track_ended(rev_before, "tester")
+        assert after_end.current_song is not None
+        assert after_end.current_song.id == s_sched.id
+        assert [q.id for q in after_end.queue] == [s_old_q.id]
+
+    await playback_controller.clear_queue()
+    await playback_controller.stop()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_scheduled_news_waits_for_active_track_then_broadcasts_before_playlist() -> None:
+    """Scheduled news does not cut into an active song; it airs after current track completes and before queued items."""
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from models.entities import Base, Playlist, Schedule, Song
+    from playback.controller import playback_controller
+    from repositories.radio import RadioRepository
+    from services.radio import RadioService
+
+    await playback_controller.clear_queue()
+    await playback_controller.clear_news_broadcasting()
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        repo = RadioRepository(session)
+        s_now = await repo.add_song(Song(title="Playing Track", artist="Artist 1", file_path="/tmp/playing.mp3", duration_seconds=0))
+        s_sched = await repo.add_song(Song(title="After News Track", artist="Artist 2", file_path="/tmp/after.mp3", duration_seconds=180))
+
+        pl = await repo.add_playlist(Playlist(name="Post-News Show"))
+        await repo.add_to_playlist(pl, s_sched)
+        sched_news = await repo.add_schedule(
+            Schedule(
+                name="Top News",
+                event_type="news",
+                run_at=datetime.now(timezone.utc),
+                enabled=True,
+                metadata_json={"duration_seconds": 60, "bullets": ["Headline 1"], "script": "Top news bulletin."},
+            )
+        )
+        sched_pl = await repo.add_schedule(
+            Schedule(name="Post-News Show", event_type="playlist", playlist_id=pl.id, run_at=datetime.now(timezone.utc), enabled=True)
+        )
+
+        service = RadioService(session)
+        await service.play(s_now.id, "tester")
+        rev_before = (await service.state()).playback_revision
+
+        # Schedule news + playlist trigger while s_now is playing
+        aired_now = await service.trigger_scheduled_news(sched_news.id, actor="scheduler_news")
+        assert aired_now is False
+        assert "broadcast_at" not in ((await repo.get_schedule(sched_news.id)).metadata_json or {})
+
+        await service.run_scheduled_playlist(sched_pl.id, pl.id, actor="scheduler")
+        mid_state = await service.state()
+        assert mid_state.current_song is not None and mid_state.current_song.id == s_now.id
+        assert mid_state.status == "playing"
+
+        # Current track completes -> news must air first, holding s_sched in queue until news finishes
+        ended_state = await service.track_ended(rev_before, "tester")
+        assert ended_state.status == "stopped"
+        assert ended_state.current_song is None
+        assert [q.id for q in ended_state.queue] == [s_sched.id]
+        updated_news = await repo.get_schedule(sched_news.id)
+        assert updated_news is not None
+        assert updated_news.enabled is False
+        assert "broadcast_at" in (updated_news.metadata_json or {})
+        assert await playback_controller.is_news_broadcasting() is True
+
+    await playback_controller.clear_news_broadcasting()
+    await playback_controller.clear_queue()
+    await playback_controller.stop()
+    await engine.dispose()

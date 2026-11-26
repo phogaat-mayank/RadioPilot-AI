@@ -638,12 +638,17 @@ export default function AIConsole({ token }: Props) {
     };
 
     void checkScheduledNews();
-    const scheduledNewsTimer = window.setInterval(() => void checkScheduledNews(), 8000);
+    const handleStationRefresh = () => {
+      void checkScheduledNews();
+    };
+    window.addEventListener("station-refresh", handleStationRefresh);
+    const scheduledNewsTimer = window.setInterval(() => void checkScheduledNews(), 4000);
 
     return () => {
       voiceActiveRef.current = false;
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
       recognitionRef.current?.abort();
+      window.removeEventListener("station-refresh", handleStationRefresh);
       window.clearInterval(scheduledNewsTimer);
     };
   }, [token]);

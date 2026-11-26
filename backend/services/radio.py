@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import logging
@@ -14,6 +15,7 @@ from schemas.radio import PlaybackState, PlaylistCreate, ScheduleCreate, SongCre
 from websocket.manager import manager
 
 logger = logging.getLogger(__name__)
+_NEWS_WATCHERS: dict[int, asyncio.Task[None]] = {}
 
 
 class RadioService:
@@ -75,7 +77,17 @@ class RadioService:
 
     async def command(self, command: str, actor: str) -> PlaybackState:
         """Execute a safe named playback command."""
-        actions = {"pause": playback_controller.pause, "resume": playback_controller.resume, "stop": playback_controller.stop, "skip": playback_controller.skip, "previous": playback_controller.previous}
+        if command == "skip":
+            pending_news_id, _ = await playback_controller.advance_or_trigger_pending_news(None)
+            self.session.add(PlaybackHistory(action=command, performed_by=actor))
+            await self.session.commit()
+            if pending_news_id is not None:
+                await self.broadcast_pending_news(pending_news_id, actor="scheduler_news")
+            else:
+                await self.log("playback", "Playback skip", actor)
+            return await self.emit_state()
+
+        actions = {"pause": playback_controller.pause, "resume": playback_controller.resume, "stop": playback_controller.stop, "previous": playback_controller.previous}
         if command not in actions:
             raise ValueError("Unsupported playback command")
         await actions[command]()
@@ -85,12 +97,15 @@ class RadioService:
         return await self.emit_state()
 
     async def track_ended(self, playback_revision: int, actor: str) -> PlaybackState:
-        """Advance from an HTML audio ended event only when it matches the active track."""
-        advanced = await playback_controller.skip_if_revision(playback_revision)
-        if advanced:
+        """Advance after track ends: broadcast any pending news first, otherwise start next queued track."""
+        pending_news_id, handled = await playback_controller.advance_or_trigger_pending_news(playback_revision)
+        if handled:
             self.session.add(PlaybackHistory(action="ended", performed_by=actor))
             await self.session.commit()
-            await self.log("playback", "Playback advanced after track ended", actor, {"playback_revision": playback_revision})
+            if pending_news_id is not None:
+                await self.broadcast_pending_news(pending_news_id, actor="scheduler_news")
+            else:
+                await self.log("playback", "Playback advanced after track ended", actor, {"playback_revision": playback_revision})
         return await self.emit_state()
 
     async def set_volume(self, volume: int, actor: str) -> PlaybackState:
@@ -137,6 +152,151 @@ class RadioService:
         action = "Interrupted with" if interrupt_current else "Started"
         await self.log("scheduler", f"{action} playlist {playlist.name}", actor, {"playlist_id": playlist.id, "interrupt_current": interrupt_current})
         return await self.emit_state()
+
+    async def run_scheduled_playlist(self, schedule_id: int | None, playlist_id: int, actor: str = "scheduler") -> PlaybackState:
+        """Play a scheduled playlist after any currently playing track finishes."""
+        schedule = await self.repository.get_schedule(schedule_id) if schedule_id is not None else None
+        if schedule is not None and not schedule.enabled:
+            return await self.state()
+
+        playlist = await self.repository.get_playlist(playlist_id)
+        if not playlist or not playlist.items:
+            if schedule is not None:
+                schedule.enabled = False
+                await self.session.commit()
+            raise ValueError("Playlist is unavailable or empty")
+
+        songs = [item.song for item in playlist.items]
+        started_now = await playback_controller.enqueue_scheduled_playlist(songs)
+        if schedule is not None:
+            schedule.enabled = False
+            await self.session.commit()
+
+        msg = (
+            f"Started scheduled playlist {playlist.name}"
+            if started_now
+            else f"Queued scheduled playlist {playlist.name} after current track"
+        )
+        await self.log("scheduler", msg, actor, {"schedule_id": schedule_id, "playlist_id": playlist.id, "started_immediately": started_now})
+        return await self.emit_state()
+
+    async def is_news_broadcasting(self) -> bool:
+        """Return whether a scheduled spoken news bulletin is currently airing."""
+        return await playback_controller.is_news_broadcasting()
+
+    async def trigger_scheduled_news(
+        self,
+        schedule_id: int,
+        metadata: dict | None = None,
+        actor: str = "scheduler_news",
+    ) -> bool:
+        """Prepare a scheduled news bulletin; defer airing until active track completes if playing.
+
+        Returns True if aired immediately, False if deferred behind an active track (or already aired).
+        """
+        from tools.news_tool import NewsTool
+
+        schedule = await self.repository.get_schedule(schedule_id)
+        if schedule is not None and (schedule.metadata_json or {}).get("broadcast_at"):
+            return False
+
+        merged_meta = {**((schedule.metadata_json or {}) if schedule else {}), **(metadata or {})}
+        duration = max(30, min(120, int(merged_meta.get("duration_seconds", 60))))
+        if not merged_meta.get("bullets"):
+            mix = merged_meta.get("mix", ["headlines", "weather", "station"])
+            bulletin = await NewsTool.automatic_bulletin(duration, mix if isinstance(mix, list) else None)
+            merged_meta.update(bulletin)
+
+        if schedule is not None:
+            schedule.metadata_json = merged_meta
+            await self.session.commit()
+
+        deferred, expected_rev, total_dur, remaining = await playback_controller.queue_pending_news_if_playing(schedule_id)
+        if deferred:
+            state = await self.state()
+            track_name = state.current_song.title if state.current_song else "active track"
+            await self.log(
+                "news",
+                f"Scheduled news queued until '{track_name}' finishes",
+                actor,
+                {"schedule_id": schedule_id, "playback_revision": expected_rev},
+            )
+            if total_dur > 0:
+                existing_watcher = _NEWS_WATCHERS.pop(schedule_id, None)
+                if existing_watcher and not existing_watcher.done():
+                    existing_watcher.cancel()
+                _NEWS_WATCHERS[schedule_id] = asyncio.create_task(
+                    self._watch_track_end_for_news(schedule_id, expected_rev, remaining + 2.5)
+                )
+            await self.emit_state()
+            return False
+
+        await self._activate_news_broadcast(schedule, merged_meta, duration, actor)
+        await self.emit_state()
+        return True
+
+    async def broadcast_pending_news(self, schedule_id: int, actor: str = "scheduler_news") -> None:
+        """Air a previously deferred news bulletin immediately upon current track completion."""
+        watcher = _NEWS_WATCHERS.pop(schedule_id, None)
+        if watcher and not watcher.done():
+            watcher.cancel()
+
+        schedule = await self.repository.get_schedule(schedule_id)
+        if schedule is not None and (schedule.metadata_json or {}).get("broadcast_at"):
+            return
+
+        meta = dict(schedule.metadata_json or {}) if schedule else {}
+        duration = max(30, min(120, int(meta.get("duration_seconds", 60))))
+        if not meta.get("bullets"):
+            from tools.news_tool import NewsTool
+            mix = meta.get("mix", ["headlines", "weather", "station"])
+            meta.update(await NewsTool.automatic_bulletin(duration, mix if isinstance(mix, list) else None))
+
+        await self._activate_news_broadcast(schedule, meta, duration, actor)
+
+    async def _activate_news_broadcast(
+        self,
+        schedule: Schedule | None,
+        metadata: dict,
+        duration: int,
+        actor: str,
+    ) -> None:
+        """Mark news active on air and schedule queue resumption after bulletin duration."""
+        from scheduler.service import _resume_after_news
+
+        if schedule is not None:
+            schedule.metadata_json = {
+                **metadata,
+                "duration_seconds": duration,
+                "broadcast_at": datetime.now(timezone.utc).isoformat(),
+            }
+            schedule.enabled = False
+            await self.session.commit()
+
+        await playback_controller.set_news_broadcasting(duration)
+        asyncio.create_task(_resume_after_news(duration))
+        await self.log(
+            "news",
+            f"Scheduled news bulletin broadcasting ({duration}s)",
+            actor,
+            {"schedule_id": schedule.id if schedule else None, "duration_seconds": duration},
+        )
+
+    @staticmethod
+    async def _watch_track_end_for_news(schedule_id: int, expected_revision: int, wait_seconds: float) -> None:
+        """Headless fallback timer: trigger deferred news if active track reaches duration without browser event."""
+        try:
+            await asyncio.sleep(max(1.0, wait_seconds))
+            _NEWS_WATCHERS.pop(schedule_id, None)
+            pending_news_id, handled = await playback_controller.advance_or_trigger_pending_news(expected_revision)
+            if handled and pending_news_id is not None:
+                from database.session import SessionLocal
+                async with SessionLocal() as session:
+                    service = RadioService(session)
+                    await service.broadcast_pending_news(pending_news_id, actor="scheduler_news_fallback")
+                    await service.emit_state()
+        except asyncio.CancelledError:
+            pass
 
     async def _require_song(self, song_id: int) -> Song:
         """Fetch a song or raise a transport-neutral not-found error."""

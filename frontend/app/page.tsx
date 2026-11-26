@@ -219,6 +219,7 @@ export default function Home() {
       setError("");
       await request(path, token!, init);
       await refresh();
+      window.dispatchEvent(new Event("station-refresh"));
     } catch (invokeError) {
       setError(invokeError instanceof Error ? invokeError.message : "Request failed");
     }

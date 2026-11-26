@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Iterable
 from datetime import datetime, timezone
 import logging
@@ -140,12 +139,10 @@ class AutopilotRuntime:
                 if not isinstance(playlist_id, int):
                     raise ValueError("PLAY_PLAYLIST requires an integer playlist_id")
                 sched_id = action.payload.get("schedule_id")
-                await service.run_playlist(playlist_id, actor="autopilot", interrupt_current=isinstance(sched_id, int))
                 if isinstance(sched_id, int):
-                    sched = await RadioRepository(session).get_schedule(sched_id)
-                    if sched:
-                        sched.enabled = False
-                        await session.commit()
+                    await service.run_scheduled_playlist(sched_id, playlist_id, actor="autopilot")
+                else:
+                    await service.run_playlist(playlist_id, actor="autopilot", interrupt_current=False)
                 return
             if action.action_type in {ActionType.LOAD_QUEUE, ActionType.PLAY_ADS, ActionType.PLAY_JINGLE}:
                 song_ids = self._song_ids(action)
@@ -160,11 +157,13 @@ class AutopilotRuntime:
                 for song_id in accepted_ids:
                     await service.enqueue_song(song_id, actor="autopilot")
                 state = await service.state()
-                if state.status == "stopped":
+                if state.status == "stopped" and not await service.is_news_broadcasting():
                     await service.play(None, actor="autopilot")
                 await service.log("autopilot", "Autopilot queue refill executed", "autopilot", {"requested_song_ids": list(song_ids), "accepted_song_ids": list(accepted_ids), "queue_depth": len(state.queue)})
                 return
             if action.action_type is ActionType.RECOVER_PLAYBACK:
+                if await service.is_news_broadcasting():
+                    return
                 song_ids = self._song_ids(action, "replacement_song_ids")
                 state = await service.state()
                 existing_ids = {song.id for song in state.queue}
@@ -215,33 +214,15 @@ class AutopilotRuntime:
 
     async def _broadcast_news(self, session: AsyncSession, service: RadioService, action: AutopilotAction) -> None:
         schedule_id = action.payload.get("schedule_id")
-        schedule = await RadioRepository(session).get_schedule(schedule_id) if isinstance(schedule_id, int) else None
-        bulletin = (schedule.metadata_json or {}) if schedule else {}
-        if not bulletin.get("bullets"):
-            bulletin = await NewsTool.automatic_bulletin(int(action.payload.get("duration_seconds", 60)))
-        if schedule:
-            schedule.metadata_json = {
-                **(schedule.metadata_json or {}),
-                **bulletin,
-                "broadcast_at": datetime.now(timezone.utc).isoformat(),
-            }
-            schedule.enabled = False
-            await session.commit()
-        playback = await service.state()
-        duration = max(30, min(120, int(bulletin.get("duration_seconds", action.payload.get("duration_seconds", 60)))))
-        if playback.status == "playing":
-            await service.command("pause", actor="autopilot_news")
-            asyncio.create_task(self._resume_after_news(duration), name=f"radiopilot-news-resume-{schedule_id}")
-        await service.log("news", "Autopilot news bulletin triggered", "autopilot", {"schedule_id": schedule_id, **bulletin})
-
-    async def _resume_after_news(self, duration_seconds: int) -> None:
-        """Resume a paused Autopilot music bed after its bounded spoken bulletin."""
-        await asyncio.sleep(duration_seconds)
-        async with SessionLocal() as session:
-            service = RadioService(session)
-            state = await service.state()
-            if state.mode == "AUTOPILOT" and state.status == "paused":
-                await service.command("resume", actor="autopilot_news")
+        if not isinstance(schedule_id, int):
+            return
+        aired_now = await service.trigger_scheduled_news(schedule_id, action.payload, actor="autopilot_news")
+        await service.log(
+            "news",
+            "Autopilot news bulletin triggered" if aired_now else "Autopilot news queued after active track",
+            "autopilot",
+            {"schedule_id": schedule_id, "aired_now": aired_now},
+        )
 
 
 autopilot_runtime = AutopilotRuntime()

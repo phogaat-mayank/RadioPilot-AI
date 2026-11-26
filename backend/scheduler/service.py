@@ -77,6 +77,12 @@ class StationScheduler:
                 logger.info("Unregistered schedule job", extra={"schedule_id": schedule_id})
         except Exception as ex:
             logger.warning("Could not unregister schedule %s: %s", schedule_id, ex)
+        try:
+            from playback.controller import playback_controller
+            loop = asyncio.get_running_loop()
+            loop.create_task(playback_controller.remove_pending_news(schedule_id))
+        except RuntimeError:
+            pass
 
     async def sync_database_schedules(self) -> int:
         """Sync and register all enabled upcoming schedules from the database."""
@@ -88,71 +94,44 @@ class StationScheduler:
             repo = RadioRepository(session)
             schedules = await repo.list_schedules(upcoming_only=True)
             for s in schedules:
-                if s.enabled and s.run_at >= now:
-                    self.register_schedule(s.id, s.event_type, s.playlist_id, s.run_at, s.metadata_json)
+                run_at_utc = s.run_at.astimezone(timezone.utc) if s.run_at.tzinfo else s.run_at.replace(tzinfo=timezone.utc)
+                if s.enabled and run_at_utc >= now:
+                    self.register_schedule(s.id, s.event_type, s.playlist_id, run_at_utc, s.metadata_json)
                     count += 1
         logger.info("Synchronized %d upcoming schedule(s) from database into scheduler", count)
         return count
 
 
 async def _run_playlist(schedule_id: int, playlist_id: int) -> None:
-    """Execute a scheduled playlist, interrupt current if playing, and mark finished."""
+    """Execute a scheduled playlist after any currently playing track completes."""
     from database.session import SessionLocal
-    from repositories.radio import RadioRepository
     from services.radio import RadioService
     async with SessionLocal() as session:
         try:
             service = RadioService(session)
-            repo = RadioRepository(session)
-            await service.run_playlist(playlist_id, actor="scheduler", interrupt_current=True)
-            schedule = await repo.get_schedule(schedule_id)
-            if schedule:
-                schedule.enabled = False
-                await session.commit()
-            await service.emit_state()
-            logger.info("Scheduled playlist executed and marked finished", extra={"schedule_id": schedule_id, "playlist_id": playlist_id})
+            await service.run_scheduled_playlist(schedule_id, playlist_id, actor="scheduler")
+            logger.info("Scheduled playlist processed", extra={"schedule_id": schedule_id, "playlist_id": playlist_id})
         except Exception:
             logger.exception("Scheduled playlist execution failed", extra={"schedule_id": schedule_id, "playlist_id": playlist_id})
 
 
 async def _run_news(schedule_id: int, metadata: dict[str, Any]) -> None:
-    """Execute a scheduled news bulletin and mark finished."""
+    """Prepare and broadcast a scheduled news bulletin once any active track completes."""
     from database.session import SessionLocal
-    from repositories.radio import RadioRepository
     from services.radio import RadioService
-    from tools.news_tool import NewsTool
     async with SessionLocal() as session:
         try:
             service = RadioService(session)
-            repo = RadioRepository(session)
-            duration = int(metadata.get("duration_seconds", 60))
-            mix = metadata.get("mix", ["headlines", "weather", "station"])
-            bulletin = await NewsTool.automatic_bulletin(duration, mix if isinstance(mix, list) else None)
-
-            schedule = await repo.get_schedule(schedule_id)
-            if schedule:
-                schedule.metadata_json = {
-                    **(schedule.metadata_json or {}),
-                    **bulletin,
-                    "broadcast_at": datetime.now(timezone.utc).isoformat(),
-                }
-                schedule.enabled = False
-                await session.commit()
-
-            state = await service.state()
-            if state.status == "playing":
-                await service.command("pause", actor="scheduler_news")
-                asyncio.create_task(_resume_after_news(duration))
-
-            await service.emit_state()
-            logger.info("Scheduled news bulletin broadcasted and marked finished", extra={"schedule_id": schedule_id})
+            await service.trigger_scheduled_news(schedule_id, metadata, actor="scheduler_news")
         except Exception:
             logger.exception("Scheduled news execution failed", extra={"schedule_id": schedule_id})
 
 
 async def _resume_after_news(duration_seconds: int) -> None:
-    """Resume music playback after news bulletin completes."""
+    """Resume queue or paused playback after a scheduled news bulletin completes."""
+    from playback.controller import playback_controller
     await asyncio.sleep(duration_seconds)
+    await playback_controller.clear_news_broadcasting()
     from database.session import SessionLocal
     from services.radio import RadioService
     async with SessionLocal() as session:
@@ -160,6 +139,8 @@ async def _resume_after_news(duration_seconds: int) -> None:
         state = await service.state()
         if state.status == "paused":
             await service.command("resume", actor="scheduler_news")
+        elif state.status != "playing" and state.queue:
+            await service.play(None, actor="scheduler_news")
 
 
 station_scheduler = StationScheduler()

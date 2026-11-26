@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 import socket
 from pathlib import Path
@@ -154,6 +154,8 @@ class PlaybackController:
         self._started_at: datetime | None = None
         self._volume = 75
         self._playback_revision = 0
+        self._pending_news_schedules: deque[int] = deque()
+        self._news_broadcasting_until: datetime | None = None
         self._lock = asyncio.Lock()
 
     async def queue(self, song: Song | SongSnapshot) -> None:
@@ -194,6 +196,92 @@ class PlaybackController:
             self._current, self._status = target, "playing"
             self._position_seconds, self._started_at = 0.0, datetime.now(timezone.utc)
             self._playback_revision += 1
+
+    async def enqueue_scheduled_playlist(self, songs: list[Song | SongSnapshot]) -> bool:
+        """Play a scheduled playlist now when idle, or queue it right after any playing track finishes.
+
+        Returns True when playback started immediately, False when deferred behind an active track/news.
+        """
+        if not songs:
+            raise ValueError("Cannot enqueue an empty scheduled playlist")
+        snapshots = [s for s in (SongSnapshot.from_song(song) for song in songs) if s]
+        if not snapshots:
+            raise ValueError("No valid songs found in playlist")
+        async with self._lock:
+            now = datetime.now(timezone.utc)
+            news_active = self._news_broadcasting_until is not None and now < self._news_broadcasting_until
+            if self._status == "playing" or news_active:
+                new_queue = deque(snapshots)
+                new_queue.extend(self._queue)
+                self._queue = new_queue
+                return False
+
+            target, remaining = snapshots[0], snapshots[1:]
+            if self._current and self._current.id != target.id:
+                self._history.append(self._current)
+            existing_queue = deque(self._queue)
+            self._queue = deque(remaining)
+            self._queue.extend(existing_queue)
+            self._engine.play(target.file_path)
+            self._current, self._status = target, "playing"
+            self._position_seconds, self._started_at = 0.0, now
+            self._playback_revision += 1
+            return True
+
+    async def queue_pending_news_if_playing(self, schedule_id: int) -> tuple[bool, int, float, float]:
+        """Defer a news bulletin when a track is actively playing.
+
+        Returns (deferred, playback_revision, track_duration_seconds, remaining_seconds).
+        """
+        async with self._lock:
+            if self._status == "playing":
+                if schedule_id not in self._pending_news_schedules:
+                    self._pending_news_schedules.append(schedule_id)
+                dur = self._current.duration_seconds if self._current else 0.0
+                pos = self._current_position_unlocked()
+                remaining = max(0.0, dur - pos) if dur > 0 else 0.0
+                return True, self._playback_revision, dur, remaining
+            return False, self._playback_revision, 0.0, 0.0
+
+    async def remove_pending_news(self, schedule_id: int) -> None:
+        """Remove a cancelled news schedule from the pending-after-track queue."""
+        async with self._lock:
+            self._pending_news_schedules = deque(sid for sid in self._pending_news_schedules if sid != schedule_id)
+
+    async def set_news_broadcasting(self, duration_seconds: int) -> None:
+        """Mark an active spoken news bulletin window so autopilot does not talk over news."""
+        async with self._lock:
+            self._news_broadcasting_until = datetime.now(timezone.utc) + timedelta(seconds=max(1, duration_seconds))
+
+    async def clear_news_broadcasting(self) -> None:
+        """Clear the active spoken news bulletin window."""
+        async with self._lock:
+            self._news_broadcasting_until = None
+
+    async def is_news_broadcasting(self) -> bool:
+        """Return whether a scheduled spoken news bulletin is currently airing."""
+        async with self._lock:
+            return self._news_broadcasting_until is not None and datetime.now(timezone.utc) < self._news_broadcasting_until
+
+    async def advance_or_trigger_pending_news(self, expected_revision: int | None = None) -> tuple[int | None, bool]:
+        """Finish current track; hold queue and return pending news ID if due, else play next queued track.
+
+        Returns (pending_news_schedule_id, handled).
+        """
+        async with self._lock:
+            if expected_revision is not None and (expected_revision != self._playback_revision or self._status != "playing"):
+                return None, False
+            if self._pending_news_schedules:
+                if self._current:
+                    self._history.append(self._current)
+                self._engine.stop()
+                self._current, self._status = None, "stopped"
+                self._position_seconds, self._started_at = 0.0, None
+                self._playback_revision += 1
+                news_schedule_id = self._pending_news_schedules.popleft()
+                return news_schedule_id, True
+            self._skip_unlocked()
+            return None, True
 
     async def play(self, song: Song | SongSnapshot | None = None) -> None:
         """Start a supplied asset or the next queued asset."""
