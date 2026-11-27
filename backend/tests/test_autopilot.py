@@ -239,3 +239,55 @@ async def test_scheduled_news_waits_for_active_track_then_broadcasts_before_play
     await playback_controller.clear_queue()
     await playback_controller.stop()
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_indian_news_feeds_deduplicate_and_never_repeat(tmp_path, monkeypatch) -> None:
+    """NewsTool fetches pan-India feeds and rotates distinct headlines across consecutive schedules."""
+    import httpx
+    from tools.news_tool import INDIA_RSS_FEEDS, NewsTool
+
+    assert all("bbc.co.uk" not in u and "nytimes.com" not in u and "npr.org" not in u for u in INDIA_RSS_FEEDS)
+
+    rss_xml_1 = b"""<?xml version="1.0" encoding="UTF-8"?>
+    <rss><channel>
+      <item><title>Delhi metro expands Phase 4 corridor across capital</title></item>
+      <item><title>ISRO schedules next PSLV launch from Sriharikota</title></item>
+      <item><title>Mumbai coastal road sees smooth morning traffic</title></item>
+    </channel></rss>"""
+    rss_xml_2 = b"""<?xml version="1.0" encoding="UTF-8"?>
+    <rss><channel>
+      <item><title>ISRO schedules next PSLV launch from Sriharikota - The Times of India</title></item>
+      <item><title>Chennai port sets new cargo handling record in Tamil Nadu</title></item>
+      <item><title>Bengaluru tech corridor launches solar transit initiative</title></item>
+    </channel></rss>"""
+
+    class FakeResp:
+        def __init__(self, content: bytes) -> None:
+            self.content = content
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+        async def get(self, url: str, headers=None):
+            if "thehindu" in url:
+                return FakeResp(rss_xml_1)
+            if "timesofindia" in url:
+                return FakeResp(rss_xml_2)
+            return FakeResp(b"<rss><channel></channel></rss>")
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    hist_file = tmp_path / ".news-history.json"
+
+    first_batch = await NewsTool.fetch_rss_headlines(limit=3, history_path=hist_file)
+    second_batch = await NewsTool.fetch_rss_headlines(limit=2, history_path=hist_file)
+
+    assert len(first_batch) == 3
+    assert len(second_batch) == 2
+    assert set(first_batch).isdisjoint(set(second_batch))
